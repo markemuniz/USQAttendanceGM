@@ -5,6 +5,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Budtender Attendance Tracker — USQ GM</title>
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.0/package/dist/xlsx.full.min.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
@@ -258,6 +259,8 @@
         <div class="dropdown-menu" id="monthFilterMenu"></div>
       </div>
       <button class="btn" id="hideBtn" onclick="toggleShowHidden()">Show Hidden</button>
+      <button class="btn" onclick="openImport()">&#8593; Import</button>
+      <button class="btn" onclick="openImportHistory()">&#128339; History<span class="log-count" id="importLogCount" style="display:none"></span></button>
       <button class="btn" onclick="openAddPerson()">&#43; Budtender</button>
       <button class="btn" onclick="openAddDay()">&#43; Day</button>
       <button class="btn" onclick="openChangeLog()">&#9998; Change Log</button>
@@ -270,7 +273,7 @@
   <div class="table-wrap" id="tableWrap">
     <div class="empty-state" id="emptyState">
       <h2>No attendance data yet</h2>
-      <p>Click &ldquo;+ Budtender&rdquo; to add people, then &ldquo;+ Day&rdquo; to add date columns</p>
+      <p>Click Import to upload a weekly Excel report</p>
     </div>
     <table id="mainTable" style="display:none">
       <thead id="tableHead"></thead>
@@ -332,6 +335,22 @@
   </div>
 </div>
 
+<div class="modal-overlay" id="importModal">
+  <div class="import-box">
+    <h3 style="margin-bottom:4px;font-weight:700;">Import Weekly Report</h3>
+    <p style="font-size:0.8rem;color:var(--text-muted);margin-bottom:16px;">Upload the attendance notices file, or a time-off requests report to excuse approved sick days</p>
+    <div class="drop-zone" id="dropZone">
+      <p><strong>Drop .xlsx file here</strong><br>or click to browse</p>
+    </div>
+    <input type="file" id="fileInput" accept=".xlsx,.xls,.csv" style="display:none">
+    <div class="import-preview" id="importPreview"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px;">
+      <button class="btn" onclick="closeImport()">Cancel</button>
+      <button class="btn primary" id="confirmImportBtn" onclick="confirmImport()" style="display:none">Import Data</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="caModal">
   <div class="modal ca-modal">
     <h3 style="font-style:italic">Corrective Action</h3>
@@ -361,6 +380,17 @@
         <button class="btn" onclick="closeCA()">Close</button>
         <button class="btn primary" id="caRecordBtn" onclick="caRecord()">Record in tracker</button>
       </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="importHistoryModal" onclick="if(event.target===this)closeImportHistory()">
+  <div class="modal" style="width:540px">
+    <h3>Import History</h3>
+    <p class="subtitle">Every weekly report imported into this tracker, newest first</p>
+    <div id="importLogEntries"></div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeImportHistory()">Close</button>
     </div>
   </div>
 </div>
@@ -416,16 +446,85 @@ const firebaseConfig = {
 };
 firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
-// ── Restricted, standalone tracker: only this account may use it ──
+// ── Restricted tracker: only this account may use it ──
 const ALLOWED_EMAIL = 'jennifer.bartholomeo@thetravelagency.co';
 function isAllowedEmail(e) { return (e || '').trim().toLowerCase() === ALLOWED_EMAIL; }
 const dataRef = firebase.database().ref('attendance_usq_gm');
 const daysRef = firebase.database().ref('attendance_usq_gm_days');
+const importLogRef = firebase.database().ref('importLog_usq_gm');
 const employeesRef = firebase.database().ref('employees_usq_gm');
 const caAlertsRef = firebase.database().ref('caAlertsSent_usq_gm');
 
 let currentUserEmail = '';
+let importLogEntries = []; // sorted newest first
 
+// ── Import Log (Firebase-persisted, once() to avoid duplicate fires) ─────────
+function loadImportLog() {
+  importLogRef.once('value', snap => {
+    const data = snap.val();
+    if (!data) { importLogEntries = []; renderImportLog(); return; }
+    importLogEntries = Object.entries(data)
+      .map(([id, entry]) => ({ id, ...entry }))
+      .filter(e => e && e.ts && e.who && e.who !== 'undefined' && e.who !== 'unknown')
+      .sort((a, b) => b.ts - a.ts);
+    renderImportLog();
+  });
+}
+
+function logImport(count, dateRange, kind) {
+  const now = new Date();
+  const mo = now.getMonth() + 1, dy = now.getDate(), yr = String(now.getFullYear()).slice(2);
+  const timeStr = now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+  const who = (currentUserEmail || '').split('@')[0] || '';
+  if (!who) return;
+  const entry = {
+    who,
+    count: count || 0,
+    dateRange: dateRange || '',
+    kind: kind || '',
+    label: `${mo}/${dy}/${yr} ${timeStr}`,
+    ts: Date.now()
+  };
+  importLogRef.push(entry)
+    .then(() => loadImportLog())
+    .catch(err => console.error('Import log save failed:', err));
+}
+
+function renderImportLog() {
+  const entriesEl = document.getElementById('importLogEntries');
+  const countEl = document.getElementById('importLogCount');
+  countEl.textContent = importLogEntries.length;
+  countEl.style.display = importLogEntries.length ? 'inline-block' : 'none';
+  if (!importLogEntries.length) { entriesEl.innerHTML = '<div class="import-log-empty">No imports yet</div>'; return; }
+  entriesEl.innerHTML = importLogEntries.map((e, i) => {
+    const num = importLogEntries.length - i;
+    const rangeHtml = (e.dateRange && e.dateRange !== 'undefined')
+      ? `<span class="log-sep">&#183;</span><span style="color:var(--text-dim)">${e.dateRange}</span>`
+      : '';
+    const label = (e.label && e.label !== 'undefined') ? e.label : '';
+    return `<div class="import-log-entry">
+      <span class="log-num">${num}.</span>
+      <span class="log-who">${e.who}</span>
+      <span class="log-sep">&#183;</span>
+      <span>${e.kind ? e.kind : e.count + ' budtenders'}</span>
+      ${rangeHtml}
+      ${label ? `<span class="log-sep">&#183;</span><span>${label}</span>` : ''}
+      <button class="log-del" onclick="deleteImportLog('${e.id}')" title="Remove">&#x2715;</button>
+    </div>`;
+  }).join('');
+}
+
+function openImportHistory() { renderImportLog(); document.getElementById('importHistoryModal').classList.add('active'); }
+function closeImportHistory() { document.getElementById('importHistoryModal').classList.remove('active'); }
+
+function deleteImportLog(id) {
+  if (!id) return;
+  if (!confirm('Remove this entry from import history?')) return;
+  importLogRef.child(id).remove().catch(err => console.error('Import log delete failed:', err));
+  importLogEntries = importLogEntries.filter(e => e.id !== id);
+  renderImportLog();
+}
+// ─────────────────────────────────────────────────────────────────────────────
 
 function togglePassword() {
   const i = document.getElementById('passwordInput');
@@ -475,6 +574,7 @@ function showApp() {
   document.getElementById('loginView').style.display = 'none';
   document.getElementById('appView').style.display = 'flex';
   loadData();
+  loadImportLog();
   loadDays();
   loadEmployees();
   loadCAAlerts();
@@ -634,6 +734,193 @@ document.addEventListener('click', e => {
     document.getElementById('monthFilterMenu').classList.remove('active');
   }
 });
+function openImport() {
+  document.getElementById('importModal').classList.add('active');
+  pendingImport = null; pendingEmployees = null;
+  document.getElementById('importPreview').style.display = 'none';
+  document.getElementById('confirmImportBtn').style.display = 'none';
+  document.getElementById('confirmImportBtn').textContent = 'Import Data';
+}
+function closeImport() { document.getElementById('importModal').classList.remove('active'); pendingImport = null; pendingEmployees = null; }
+const dropZone = document.getElementById('dropZone');
+const fileInput = document.getElementById('fileInput');
+dropZone.addEventListener('click', () => fileInput.click());
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('dragover'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+dropZone.addEventListener('drop', e => { e.preventDefault(); dropZone.classList.remove('dragover'); if (e.dataTransfer.files.length) processFile(e.dataTransfer.files[0]); });
+fileInput.addEventListener('change', e => { if (e.target.files.length) processFile(e.target.files[0]); fileInput.value = ''; });
+function processFile(file) {
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const wb = XLSX.read(e.target.result, { type: 'array' });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws, { defval: '' });
+      if (!rows.length) { toast('File appears empty', 'error'); return; }
+      const cols = Object.keys(rows[0]);
+      if (cols.some(c => /employee.?(id|number|no)/i.test(c)) && cols.some(c => /first.?name/i.test(c)) && cols.some(c => /last.?name/i.test(c))) { parseEmployeeList(rows, cols); return; }
+      if (cols.some(c => /^start date$/i.test(c.trim())) && cols.some(c => /^end date$/i.test(c.trim())) && cols.some(c => /^status$/i.test(c.trim()))) {
+        parseTimeOff(rows, cols); return;
+      }
+      const nameCol = cols.find(c => /^name$/i.test(c.trim())) || cols.find(c => /name/i.test(c));
+      const dateCol = cols.find(c => /^date$/i.test(c.trim())) || cols.find(c => /date/i.test(c));
+      const typeCol = cols.find(c => /^type$/i.test(c.trim())) || cols.find(c => /type/i.test(c));
+      if (!nameCol || !dateCol || !typeCol) {
+        const fnCol = cols.find(c => /first.?name/i.test(c));
+        const lnCol = cols.find(c => /last.?name/i.test(c));
+        if (fnCol && lnCol) { parseGrid(rows, fnCol, lnCol, cols); return; }
+        toast('Could not detect Name/Date/Type columns.', 'error'); return;
+      }
+      parseIncidentLog(rows, nameCol, dateCol, typeCol);
+    } catch(err) { console.error(err); toast('Error: ' + err.message, 'error'); }
+  };
+  reader.readAsArrayBuffer(file);
+}
+function parseIncidentLog(rows, nameCol, dateCol, typeCol) {
+  const parsed = {};
+  rows.forEach(row => {
+    const name = (row[nameCol]||'').toString().trim();
+    const rawDate = row[dateCol];
+    const type = (row[typeCol]||'').toString().trim().toLowerCase();
+    if (!name || !rawDate) return;
+    let ds = '';
+    if (typeof rawDate === 'number') { const d = XLSX.SSF.parse_date_code(rawDate); ds = `${d.y}-${String(d.m).padStart(2,'0')}-${String(d.d).padStart(2,'0')}`; }
+    else { const d = new Date(rawDate); ds = !isNaN(d) ? d.toISOString().split('T')[0] : rawDate.toString(); }
+    const sk = name.replace(/[^a-zA-Z0-9_, -]/g, '_');
+    if (!parsed[sk]) parsed[sk] = { displayName: name, dates: {}, notes: {} };
+    const val = mapType(type, row);
+    if (val) {
+      parsed[sk].dates[ds] = val;
+      const keys = Object.keys(row);
+      const lateKey = keys.find(k => /late.*early|early.*late/i.test(k)) || keys.find(k => /^late$/i.test(k.trim()));
+      const shiftKey = keys.find(k => /shift.?time/i.test(k));
+      const clockKey = keys.find(k => /clock.?in.*out|clock.?time/i.test(k));
+      const lateInfo = lateKey ? (row[lateKey]||'').toString().trim() : '';
+      const shiftTime = shiftKey ? (row[shiftKey]||'').toString().trim() : '';
+      let clockTime = clockKey ? (row[clockKey]||'').toString().trim() : '';
+      if (clockTime && !isNaN(parseFloat(clockTime)) && parseFloat(clockTime) < 1) {
+        const totalMins = Math.round(parseFloat(clockTime) * 1440);
+        const h = Math.floor(totalMins / 60), mn = totalMins % 60;
+        const ampm = h >= 12 ? 'PM' : 'AM', h12 = h === 0 ? 12 : h > 12 ? h - 12 : h;
+        clockTime = h12 + ':' + String(mn).padStart(2,'0') + ' ' + ampm;
+      }
+      let note = type;
+      if (lateInfo) note += ' (' + lateInfo + ')';
+      if (shiftTime) note += ' | Shift: ' + shiftTime;
+      if (clockTime) note += ' | Clocked: ' + clockTime;
+      parsed[sk].notes[ds] = note;
+    }
+  });
+  showPreview(parsed);
+}
+// ── Time-off report (When I Work) → excuse points on approved sick days ─────
+function toISODate(raw) {
+  if (typeof raw === 'number') { const d = XLSX.SSF.parse_date_code(raw); return `${d.y}-${String(d.m).padStart(2,'0')}-${String(d.d).padStart(2,'0')}`; }
+  const str = (raw||'').toString().trim();
+  if (/^\d{4}-\d{2}-\d{2}/.test(str)) return str.slice(0,10);
+  const d = new Date(str); return isNaN(d) ? '' : `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+function timeOffMins(raw, fallback) {
+  if (typeof raw === 'number' && raw >= 0 && raw < 1) return Math.round(raw * 1440);
+  const m = parseTimeToMins((raw||'').toString());
+  if (m === null) return fallback;
+  return /11:59\s*pm/i.test(raw) ? 1440 : m;
+}
+function addDaysISO(ds, n) { const d = new Date(ds + 'T00:00:00'); d.setDate(d.getDate() + n); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
+function findPersonKey(name) {
+  if (attendanceData[name]) return name;
+  const sk = name.replace(/[^a-zA-Z0-9_, -]/g, '_');
+  if (attendanceData[sk]) return sk;
+  const low = name.toLowerCase();
+  return Object.keys(attendanceData).find(k => (attendanceData[k].displayName||k).toLowerCase() === low) || null;
+}
+function parseTimeOff(rows, cols) {
+  const col = re => cols.find(c => re.test(c.trim()));
+  const nameCol = col(/^name$/i), typeCol = col(/^type$/i), statusCol = col(/^status$/i);
+  const sdCol = col(/^start date$/i), stCol = col(/^start time$/i), edCol = col(/^end date$/i), etCol = col(/^end time$/i);
+  const byCol = col(/approved.*by/i);
+  const parsed = {}, unmatched = new Set();
+  let sickDays = 0, alreadyExcused = 0;
+  rows.forEach(row => {
+    if (!/sick/i.test(row[typeCol]||'') || !/^approved$/i.test((row[statusCol]||'').toString().trim())) return;
+    const name = (row[nameCol]||'').toString().trim();
+    const sd = toISODate(row[sdCol]), ed = toISODate(row[edCol]);
+    if (!name || !sd || !ed) return;
+    const startM = timeOffMins(row[stCol], 0), endM = timeOffMins(row[etCol], 1440);
+    const key = findPersonKey(name);
+    const by = byCol ? (row[byCol]||'').toString().trim() : '';
+    for (let d = sd; d <= ed; d = addDaysISO(d, 1)) {
+      const winStart = d === sd ? startM : 0;
+      const winEnd = d === ed ? endM : 1440;
+      if (winEnd <= winStart) continue; // e.g. request ending 12:00 am on this day
+      sickDays++;
+      if (!key) { unmatched.add(name); continue; }
+      const p = attendanceData[key];
+      const val = p.dates && p.dates[d];
+      if (val === 'Excused') { alreadyExcused++; continue; }
+      if (getPoints(val) <= 0) continue;
+      const note = (p.notes && p.notes[d]) || '';
+      const sm = note.match(/Shift:\s*([0-9:]+\s*[AP]M)\s*-\s*([0-9:]+\s*[AP]M)/i);
+      const shiftStart = sm ? parseTimeToMins(sm[1]) : null;
+      let shiftEnd = sm ? parseTimeToMins(sm[2]) : null;
+      if (shiftEnd !== null && shiftStart !== null && shiftEnd <= shiftStart) shiftEnd += 1440;
+      let covered;
+      if (shiftStart === null) covered = true;
+      else if (val.toString().trim() === '0.5') covered = winStart <= shiftStart && winEnd > shiftStart; // late: sick time must cover the shift start
+      else covered = winStart < shiftEnd && winEnd > shiftStart; // no-show: any overlap with the shift
+      if (!covered) continue;
+      if (!parsed[key]) parsed[key] = { displayName: p.displayName || key, dates: {}, notes: {}, was: {} };
+      parsed[key].dates[d] = 'Excused';
+      parsed[key].was[d] = val;
+      parsed[key].notes[d] = (note ? note + ' | ' : '') + 'Excused: approved sick time off' + (by ? ' (' + by + ')' : '');
+    }
+  });
+  showTimeOffPreview(parsed, { sickDays, alreadyExcused, unmatched: [...unmatched] });
+}
+function showTimeOffPreview(parsed, stats) {
+  pendingImport = parsed; pendingEmployees = null;
+  const changes = [];
+  Object.values(parsed).forEach(p => Object.keys(p.dates).forEach(d => changes.push({ name: p.displayName, d, was: p.was[d] })));
+  changes.sort((a, b) => a.d.localeCompare(b.d));
+  const fmt = ds => { const d = new Date(ds + 'T00:00:00'); return (d.getMonth()+1) + '/' + d.getDate(); };
+  const p = document.getElementById('importPreview');
+  p.innerHTML = `<p style="margin-bottom:8px"><strong>Time-off report:</strong> ${stats.sickDays} approved sick days &middot; ${stats.alreadyExcused} already excused &middot; <strong>${changes.length}</strong> point${changes.length===1?'':'s'} to excuse</p>
+    ${stats.unmatched.length ? `<p style="margin-bottom:8px;color:var(--text-muted)">Not on tracker: ${stats.unmatched.join(', ')}</p>` : ''}
+    ${changes.length ? `<table><thead><tr><th>Name</th><th>Date</th><th>Was</th><th>Now</th></tr></thead><tbody>
+    ${changes.map(c => `<tr><td>${c.name}</td><td>${fmt(c.d)}</td><td>${c.was}</td><td style="color:var(--green)">Excused</td></tr>`).join('')}
+    </tbody></table>` : '<p style="color:var(--text-muted)">Nothing to change.</p>'}`;
+  p.style.display = 'block';
+  const btn = document.getElementById('confirmImportBtn');
+  btn.textContent = 'Apply Excused';
+  btn.style.display = changes.length ? 'inline-flex' : 'none';
+}
+// ─────────────────────────────────────────────────────────────────────────────
+function mapType(type, row) {
+  const pos = (row['Position']||'').toString().toLowerCase();
+  const allVals = Object.values(row).map(v => (v||'').toString().toLowerCase()).join(' ');
+  if (/ambassador/i.test(pos) || /ambassador/i.test(allVals)) return null;
+  if (/no.?show/i.test(type)) return '1';
+  if (/late/i.test(type) && /clock.?in/i.test(type)) {
+    const keys = Object.keys(row);
+    const shiftKey = keys.find(k => /shift.?time/i.test(k));
+    const clockKey = keys.find(k => /clock.?in.*out|clock.?time/i.test(k));
+    const shiftVal = shiftKey ? (row[shiftKey]||'').toString().trim() : '';
+    const clockVal = clockKey ? (row[clockKey]||'').toString().trim() : '';
+    const realMins = calcLateMinutes(shiftVal, clockVal);
+    if (realMins !== null) { if (realMins < 8) return null; return '0.5'; }
+    let lv = '';
+    const lateKey = keys.find(k => /^late$/i.test(k.trim())) || keys.find(k => /late.*early|early.*late/i.test(k)) || keys.find(k => /late/i.test(k) && !/clock/i.test(k));
+    if (lateKey) lv = (row[lateKey]||'').toString().trim();
+    const m = parseMins(lv);
+    if (m !== null && m < 8) return null;
+    return '0.5';
+  }
+  if (/late.?clock.?out/i.test(type)) return null;
+  if (/early/i.test(type)) return null;
+  if (/left.?early/i.test(type)) return null;
+  if (/late/i.test(type) && !/clock.?in/i.test(type)) return null;
+  return null;
+}
 function calcLateMinutes(shiftVal, clockVal) {
   if (!shiftVal || !clockVal) return null;
   const shiftStart = parseTimeToMins(shiftVal.split('-')[0].trim());
@@ -669,11 +956,76 @@ function parseMins(s) {
   if (n > 0 && n < 1) return Math.round(n * 1440);
   return n;
 }
+function parseGrid(rows, fnCol, lnCol, cols) {
+  const parsed = {};
+  const dc = cols.filter(c => c !== fnCol && c !== lnCol && !/annual|month|pts|point|write/i.test(c));
+  rows.forEach(row => {
+    const fn=(row[fnCol]||'').toString().trim(), ln=(row[lnCol]||'').toString().trim();
+    if (!fn&&!ln) return;
+    const name = ln ? `${ln}, ${fn}` : fn;
+    const sk = name.replace(/[^a-zA-Z0-9_, -]/g, '_');
+    if (!parsed[sk]) parsed[sk] = { displayName: name, dates: {} };
+    dc.forEach(d => { const v=(row[d]||'').toString().trim(); if (v) parsed[sk].dates[d]=v; });
+  });
+  showPreview(parsed);
+}
+function showPreview(parsed) {
+  pendingImport = parsed; pendingEmployees = null;
+  const names = Object.keys(parsed);
+  let ti = 0; names.forEach(n => ti += Object.keys(parsed[n].dates).length);
+  const p = document.getElementById('importPreview');
+  p.innerHTML = `<p style="margin-bottom:8px"><strong>${names.length}</strong> budtenders, <strong>${ti}</strong> incidents</p>
+    <table><thead><tr><th>Name</th><th>#</th></tr></thead><tbody>
+    ${names.slice(0,15).map(n => `<tr><td>${parsed[n].displayName||n}</td><td>${Object.keys(parsed[n].dates).length}</td></tr>`).join('')}
+    ${names.length>15?`<tr><td colspan="2" style="color:var(--text-muted)">...+${names.length-15} more</td></tr>`:''}
+    </tbody></table>`;
+  p.style.display = 'block';
+  document.getElementById('confirmImportBtn').style.display = 'inline-flex';
+}
+function confirmImport() {
+  if (pendingEmployees) { confirmEmployeeImport(); return; }
+  if (!pendingImport) return;
+  const caBefore = caPendingKeys();
+  const snapshot = pendingImport;
+  const count = Object.keys(snapshot).length;
+
+  // Extract date range before anything clears pendingImport
+  const allImportDates = [];
+  Object.values(snapshot).forEach(p => { if (p.dates) Object.keys(p.dates).forEach(d => allImportDates.push(d)); });
+  allImportDates.sort();
+  let dateRange = '';
+  if (allImportDates.length) {
+    const fmt = ds => { const d = new Date(ds + 'T00:00:00'); return (d.getMonth()+1) + '/' + d.getDate(); };
+    const first = fmt(allImportDates[0]);
+    const last = fmt(allImportDates[allImportDates.length - 1]);
+    dateRange = first === last ? first : first + ' - ' + last;
+  }
+
+  const isTimeOff = Object.values(snapshot).some(v => v.was);
+  Object.entries(snapshot).forEach(([k,v]) => {
+    if (!attendanceData[k]) attendanceData[k] = { displayName: v.displayName, dates: {}, notes: {} };
+    if (!attendanceData[k].dates) attendanceData[k].dates = {};
+    if (!attendanceData[k].notes) attendanceData[k].notes = {};
+    Object.assign(attendanceData[k].dates, v.dates);
+    if (v.notes) Object.assign(attendanceData[k].notes, v.notes);
+  });
+
+  saveData(); rebuildDates(); renderTable(); closeImport();
+  if (isTimeOff) {
+    const n = Object.values(snapshot).reduce((t, v) => t + Object.keys(v.dates).length, 0);
+    logImport(count, dateRange, 'Sick time off: ' + n + ' excused');
+    toast('Excused ' + n + ' points for approved sick time', 'success');
+  } else {
+    logImport(count, dateRange);
+    toast('Imported ' + count + ' budtenders', 'success');
+  }
+  caAutoPrompt(caBefore);
+}
 function rebuildDates() {
   const s = new Set();
   Object.values(attendanceData).forEach(p => { if (p.dates) Object.keys(p.dates).forEach(d => s.add(d)); });
   Object.keys(manualDays || {}).forEach(d => s.add(d));
-  allDates = Array.from(s).filter(d => /^\d{4}-\d{2}-\d{2}$/.test(d)).sort();
+  allDates = Array.from(s).sort();
 }
 function getPoints(val) {
   if (!val) return 0;
@@ -885,7 +1237,7 @@ function fmtDateLong(d) {
   try { const dt=new Date(d+'T00:00:00'); return (dt.getMonth()+1).toString().padStart(2,'0')+'/'+dt.getDate().toString().padStart(2,'0')+'/'+dt.getFullYear(); }
   catch(e) { return d; }
 }
-// ── Manual roster + day columns (no imports on this site) ──
+// ── Manual roster + day columns  ──
 let manualDays = {};
 function loadDays() {
   daysRef.on('value', snap => { manualDays = snap.val() || {}; rebuildDates(); renderTable(); },
@@ -1109,6 +1461,39 @@ function loadEmployees() {
     employees = snap.val() || {};
     try { localStorage.setItem('bt_employees_usq_gm', JSON.stringify(employees)); } catch(e) {}
   }, err => console.warn('Employees load failed, using cached list:', err.message));
+}
+function parseEmployeeList(rows, cols) {
+  const fnCol = cols.find(c => /first.?name/i.test(c));
+  const lnCol = cols.find(c => /last.?name/i.test(c));
+  const idCol = cols.find(c => /employee.?(id|number|no)/i.test(c));
+  const map = {};
+  rows.forEach(r => {
+    const fn = (r[fnCol] || '').toString().trim(), ln = (r[lnCol] || '').toString().trim();
+    const id = (r[idCol] === 0 ? '0' : (r[idCol] || '')).toString().trim();
+    if (!fn || !ln || !id) return;
+    map[empKey(fn, ln)] = { first: fn, last: ln, id };
+  });
+  const n = Object.keys(map).length;
+  if (!n) { toast('No employees with an ID found in this file', 'error'); return; }
+  pendingEmployees = map;
+  pendingImport = null;
+  const p = document.getElementById('importPreview');
+  p.innerHTML = `<p style="margin-bottom:8px"><strong>${n}</strong> employee IDs (used to fill corrective action forms)</p>
+    <table><thead><tr><th>Name</th><th>ID</th></tr></thead><tbody>
+    ${Object.values(map).slice(0,15).map(e => `<tr><td>${escHtml(e.first)} ${escHtml(e.last)}</td><td>${escHtml(e.id)}</td></tr>`).join('')}
+    ${n>15?`<tr><td colspan="2" style="color:var(--text-muted)">...+${n-15} more</td></tr>`:''}
+    </tbody></table>`;
+  p.style.display = 'block';
+  document.getElementById('confirmImportBtn').style.display = 'inline-flex';
+}
+function confirmEmployeeImport() {
+  const map = pendingEmployees; pendingEmployees = null;
+  employees = map;
+  try { localStorage.setItem('bt_employees_usq_gm', JSON.stringify(employees)); } catch(e) {}
+  employeesRef.set(map).catch(err => toast('Employee list save failed: ' + err.message, 'error'));
+  closeImport();
+  renderTable();
+  toast('Saved ' + Object.keys(map).length + ' employee IDs', 'success');
 }
 // Older versions imported the ID file as attendance, leaving each ID in the person's row
 // under an "Employee ID" pseudo-date. Read the ID from there when the employee list has none.
