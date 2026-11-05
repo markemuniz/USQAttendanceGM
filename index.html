@@ -1,0 +1,1547 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <link rel="icon" type="image/png" href="favicon.png">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Budtender Attendance Tracker — USQ GM</title>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4.4.1/dist/email.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Playfair+Display:wght@700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  :root{
+    --bg:#0f1117;--surface:#181a23;--surface2:#1f2230;--surface3:#282b3a;
+    --border:#2e3146;--border-light:#3a3d54;--text:#e8e9f0;--text-dim:#8b8ea3;--text-muted:#5c5f75;
+    --accent:#6c8cff;--accent-dim:#4a65c7;--accent-glow:rgba(108,140,255,0.12);
+    --red:#ff6b7a;--green:#4ade80;--radius:10px;
+  }
+  html,body{height:100%}
+  body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);overflow:hidden;display:flex;flex-direction:column}
+  #loginView{min-height:100vh;display:flex;align-items:center;justify-content:center;overflow:hidden}
+  .bg-glow{position:fixed;width:500px;height:500px;border-radius:50%;filter:blur(120px);opacity:0.07;pointer-events:none}
+  .bg-glow-1{background:var(--accent);top:-200px;left:-100px}
+  .bg-glow-2{background:#a78bfa;bottom:-200px;right:-100px}
+  .login-container{width:100%;max-width:420px;padding:24px;animation:fadeUp 0.6s ease;position:relative;z-index:1}
+  @keyframes fadeUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+  .login-card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:40px 36px;box-shadow:0 20px 60px rgba(0,0,0,0.4);position:relative;overflow:hidden}
+  .login-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,var(--accent),#a78bfa,#f472b6);border-radius:16px 16px 0 0}
+  .login-icon{width:56px;height:56px;background:rgba(108,140,255,0.1);border:1px solid rgba(108,140,255,0.2);border-radius:14px;display:flex;align-items:center;justify-content:center;margin:0 auto 24px}
+  .login-icon svg{width:28px;height:28px;color:var(--accent)}
+  .login-title{font-family:'Playfair Display',serif;font-size:1.6rem;font-weight:800;text-align:center;margin-bottom:6px;background:linear-gradient(135deg,var(--accent),#a78bfa);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+  .login-sub{text-align:center;font-size:0.85rem;color:var(--text-muted);margin-bottom:32px}
+  .input-group{position:relative;margin-bottom:20px}
+  .input-group label{display:block;font-size:0.75rem;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px}
+  .input-group input{width:100%;padding:12px 44px 12px 16px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-family:inherit;font-size:0.9rem;outline:none;transition:border-color 0.2s}
+  .input-group input:focus{border-color:var(--accent)}
+  .input-group input::placeholder{color:var(--text-muted)}
+  .toggle-pw{position:absolute;right:12px;top:36px;background:none;border:none;color:var(--text-muted);cursor:pointer;padding:4px;display:flex;align-items:center}
+  .toggle-pw:hover{color:var(--text-dim)}
+  .login-btn{width:100%;padding:13px;background:var(--accent);border:none;border-radius:var(--radius);color:#fff;font-family:inherit;font-size:0.9rem;font-weight:600;cursor:pointer;transition:all 0.2s;letter-spacing:0.02em}
+  .login-btn:hover{background:var(--accent-dim);transform:translateY(-1px);box-shadow:0 4px 16px rgba(108,140,255,0.3)}
+  .login-btn:active{transform:translateY(0)}
+  .login-btn:disabled{opacity:0.6;cursor:not-allowed;transform:none}
+  .error-msg{text-align:center;color:var(--red);font-size:0.82rem;margin-top:16px;display:none;animation:shake 0.4s ease}
+  @keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-6px)}75%{transform:translateX(6px)}}
+  #appView{display:none;flex-direction:column;flex:1;overflow:hidden}
+  .store-badge{display:inline-block;padding:2px 10px;border-radius:20px;font-size:0.7rem;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;background:rgba(167,139,250,0.12);border:1px solid rgba(167,139,250,0.3);color:#a78bfa;margin-left:10px;vertical-align:middle}
+  .key-section{padding:12px 24px 8px;border-bottom:1px solid var(--border);flex-shrink:0}
+  .key-title{font-size:0.7rem;font-weight:700;color:var(--text-muted);letter-spacing:0.04em;margin-bottom:8px}
+  .key-row{display:flex;align-items:center;gap:16px;flex-wrap:wrap;font-size:0.75rem;color:var(--text-dim)}
+  .key-item{display:flex;align-items:center;gap:5px}
+  .key-swatch{width:14px;height:14px;border-radius:3px;flex-shrink:0}
+  .key-sep{width:1px;height:16px;background:var(--border)}
+  .toolbar{padding:10px 24px;display:flex;align-items:center;gap:12px;border-bottom:1px solid var(--border);flex-wrap:wrap;flex-shrink:0}
+  .search-box{padding:7px 12px 7px 30px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--text);font-family:'DM Sans',sans-serif;font-size:0.8rem;width:200px;outline:none;transition:border-color 0.15s;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%235c5f75' stroke-width='2'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cpath d='m21 21-4.3-4.3'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:10px center}
+  .search-box:focus{border-color:var(--accent)}
+  .search-box::placeholder{color:var(--text-muted)}
+  .toolbar-right{margin-left:auto;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .btn{padding:6px 12px;border:1px solid var(--border);border-radius:6px;background:var(--surface2);color:var(--text);font-family:'DM Sans',sans-serif;font-size:0.75rem;font-weight:500;cursor:pointer;transition:all 0.15s;white-space:nowrap}
+  .btn:hover{background:var(--surface3);border-color:var(--border-light)}
+  .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  .btn.primary:hover{background:var(--accent-dim)}
+  .btn.danger{color:var(--red);border-color:rgba(255,107,122,0.25)}
+  .btn.danger:hover{background:rgba(255,107,122,0.08)}
+  .btn:disabled{opacity:0.4;cursor:not-allowed}
+  .btn:disabled:hover{background:var(--surface2);border-color:var(--border)}
+  .dropdown{position:relative;display:inline-block}
+  .dropdown-btn{padding:6px 12px;border:1px solid var(--border);border-radius:6px;background:var(--surface2);color:var(--text);font-family:'DM Sans',sans-serif;font-size:0.75rem;font-weight:500;cursor:pointer;transition:all 0.15s;white-space:nowrap;display:inline-flex;align-items:center;gap:5px}
+  .dropdown-btn:hover{background:var(--surface3);border-color:var(--border-light)}
+  .dropdown-btn::after{content:'▾';font-size:0.65rem;opacity:0.7}
+  .dropdown-menu{display:none;position:absolute;top:calc(100% + 4px);right:0;background:var(--surface);border:1px solid var(--border);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,0.4);z-index:50;min-width:140px;overflow:hidden}
+  .dropdown-menu.active{display:block}
+  .dropdown-item{padding:8px 12px;cursor:pointer;font-size:0.75rem;color:var(--text);transition:background 0.1s;white-space:nowrap}
+  .dropdown-item:hover{background:var(--surface2)}
+  .dropdown-item.selected{background:var(--accent-glow);color:var(--accent)}
+  .header-dropdown{display:inline-flex;align-items:center;gap:4px;cursor:pointer;user-select:none}
+  .header-dropdown::after{content:'▾';font-size:0.6rem;opacity:0.7}
+  .header-dropdown:hover{color:var(--text-dim)}
+  .table-wrap{flex:1;overflow:auto}
+  table{border-collapse:separate;border-spacing:0;width:max-content;min-width:100%;font-size:0.78rem}
+  thead th{position:sticky;top:0;z-index:20;background:var(--surface);padding:10px 12px;text-align:left;font-weight:600;font-size:0.68rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);border-bottom:1px solid var(--border);border-right:1px solid rgba(46,49,70,0.35);white-space:nowrap}
+  thead th:last-child{border-right:none}
+  thead th:nth-child(1),thead th:nth-child(2),thead th:nth-child(3),thead th:nth-child(4),thead th:nth-child(5){position:sticky;z-index:30;background:var(--surface)}
+  thead th:nth-child(1){left:0;min-width:72px;text-align:center}
+  thead th:nth-child(2){left:72px;min-width:90px}
+  thead th:nth-child(3){left:162px;min-width:140px}
+  thead th:nth-child(4){left:302px;min-width:110px;text-align:center}
+  thead th:nth-child(5){left:412px;min-width:95px;text-align:center;border-right:1px solid rgba(108,140,255,0.25)}
+  tbody td{padding:8px 12px;border-bottom:1px solid rgba(46,49,70,0.35);border-right:1px solid rgba(46,49,70,0.35);white-space:nowrap}
+  tbody td:last-child{border-right:none}
+  tbody td:nth-child(1),tbody td:nth-child(2),tbody td:nth-child(3),tbody td:nth-child(4),tbody td:nth-child(5){position:sticky;z-index:10;background:var(--bg)}
+  tbody td:nth-child(1){left:0;min-width:72px;text-align:center;font-weight:700}
+  tbody td:nth-child(2){left:72px;min-width:90px}
+  tbody td:nth-child(3){left:162px;min-width:140px}
+  tbody td:nth-child(4){left:302px;min-width:110px;text-align:center;font-weight:600}
+  tbody td:nth-child(5){left:412px;min-width:95px;text-align:center;font-weight:600;border-right:1px solid rgba(108,140,255,0.25)}
+  tbody td.date-cell{text-align:center;cursor:pointer;min-width:55px;transition:background 0.1s;font-weight:600;font-size:0.78rem;position:relative}
+  tbody td.date-cell:hover{background:var(--surface2)}
+  tbody td.period-cell{text-align:center;cursor:default;min-width:80px;transition:background 0.1s;font-weight:600;font-size:0.8rem}
+  thead th.date-col{text-align:center;min-width:55px}
+  thead th.period-col{text-align:center;min-width:80px}
+  tbody tr:hover td{background:var(--surface)}
+  tbody tr:hover td:nth-child(1),tbody tr:hover td:nth-child(2),tbody tr:hover td:nth-child(3),tbody tr:hover td:nth-child(4),tbody tr:hover td:nth-child(5){background:var(--surface)}
+  .note-star{position:absolute;top:2px;right:3px;font-size:0.6rem;color:#facc15;line-height:1;pointer-events:none;filter:drop-shadow(0 0 2px rgba(250,204,21,0.4))}
+  .name-badge{display:inline-block;padding:3px 10px;border-radius:5px;font-size:0.75rem;font-weight:600;border:1px solid}
+  .name-green{color:#4ade80;border-color:rgba(74,222,128,0.35);background:rgba(74,222,128,0.08)}
+  .name-orange{color:#f59e0b;border-color:rgba(245,158,11,0.35);background:rgba(245,158,11,0.08)}
+  .name-red{color:#ff6b7a;border-color:rgba(255,107,122,0.35);background:rgba(255,107,122,0.08)}
+  .name-terminated{color:#ff6b7a;border-color:rgba(255,107,122,0.35);background:rgba(255,107,122,0.08);text-decoration:line-through}
+  .writeup-tag{display:inline-block;padding:2px 7px;border-radius:4px;font-size:0.65rem;font-weight:700;margin-left:6px;letter-spacing:0.03em;text-transform:uppercase;vertical-align:middle;border:1px solid}
+  .wu-1st{color:#6c8cff;border-color:rgba(108,140,255,0.4);background:rgba(108,140,255,0.1)}
+  .wu-2nd{color:#facc15;border-color:rgba(250,204,21,0.4);background:rgba(250,204,21,0.1)}
+  .wu-final{color:#f59e0b;border-color:rgba(245,158,11,0.4);background:rgba(245,158,11,0.1)}
+  .wu-term{color:#ff6b7a;border-color:rgba(255,107,122,0.4);background:rgba(255,107,122,0.1)}
+  tr.row-hidden{display:none}
+  .val-point{color:#f59e0b}
+  .val-one{color:#ff6b7a}
+  .val-excused{color:#6c8cff}
+  .val-sto{color:#38bdf8;font-weight:600}
+  .val-1st{color:#6c8cff}
+  .val-2nd{color:#facc15}
+  .val-final{color:#f59e0b}
+  .val-term{color:#ff6b7a}
+  .pts-green{color:#4ade80}
+  .pts-yellow{color:#facc15}
+  .pts-orange{color:#f59e0b}
+  .pts-red{color:#ff6b7a}
+  .pts-zero{color:var(--text-muted)}
+  .modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:100;align-items:center;justify-content:center;backdrop-filter:blur(4px)}
+  .modal-overlay.active{display:flex}
+  .modal{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:28px;width:440px;max-width:92vw;box-shadow:0 24px 80px rgba(0,0,0,0.5);animation:fadeUp 0.25s ease both;max-height:92vh;overflow-y:auto}
+  .ca-banner{display:none;align-items:center;gap:10px;padding:8px 24px;background:rgba(255,107,122,0.08);border-bottom:1px solid rgba(255,107,122,0.3);font-size:0.78rem;color:var(--red);flex-shrink:0;flex-wrap:wrap}
+  .ca-banner.active{display:flex}
+  .ca-banner .ca-chip{padding:3px 10px;border-radius:5px;border:1px solid rgba(255,107,122,0.4);background:rgba(255,107,122,0.1);color:var(--red);font-family:inherit;font-size:0.72rem;font-weight:600;cursor:pointer}
+  .ca-banner .ca-chip:hover{background:rgba(255,107,122,0.2)}
+  .ca-folder{display:inline-flex;align-items:center;justify-content:center;width:24px;height:22px;margin-left:6px;padding:0;vertical-align:middle;border-radius:5px;border:1px solid rgba(255,107,122,0.4);background:rgba(255,107,122,0.1);color:var(--red);cursor:pointer;transition:background 0.15s}
+  .ca-folder:hover{background:rgba(255,107,122,0.25)}
+  .ca-folder svg{width:13px;height:13px}
+  .ca-modal{width:860px;max-width:96vw}
+  .ca-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;margin-bottom:12px}
+  .ca-grid label{display:block;font-size:0.65rem;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:4px}
+  .ca-grid input,.ca-grid select{width:100%;padding:7px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-family:inherit;font-size:0.8rem;outline:none;color-scheme:dark}
+  .ca-grid input:focus,.ca-grid select:focus{border-color:var(--accent)}
+  .modal h3{font-size:1rem;font-weight:700;margin-bottom:4px}
+  .modal .subtitle{font-size:0.8rem;color:var(--text-muted);margin-bottom:18px}
+  .modal-btns{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:12px}
+  .modal-btns .btn{font-size:0.72rem;padding:5px 10px}
+  .modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:18px;padding-top:14px;border-top:1px solid var(--border)}
+  .note-input{width:100%;padding:10px 14px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:inherit;font-size:0.85rem;outline:none;resize:vertical;min-height:70px;line-height:1.4;transition:border-color 0.15s}
+  .note-input:focus{border-color:#facc15}
+  .note-input::placeholder{color:var(--text-muted)}
+  .note-label-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
+  .note-label{display:flex;align-items:center;gap:5px;font-size:0.72rem;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.04em}
+  .note-label .star-ico{color:#facc15;font-size:0.8rem}
+  .import-box{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:32px;width:500px;max-width:92vw;text-align:center;box-shadow:0 24px 80px rgba(0,0,0,0.5);animation:fadeUp 0.25s ease both}
+  .drop-zone{border:2px dashed var(--border);border-radius:12px;padding:44px 20px;cursor:pointer;transition:all 0.2s;margin-bottom:14px;user-select:none}
+  .drop-zone:hover,.drop-zone.dragover{border-color:var(--accent);background:var(--accent-glow)}
+  .drop-zone p{color:var(--text-muted);font-size:0.85rem}
+  .drop-zone p strong{color:var(--text)}
+  .import-preview{display:none;text-align:left;margin-top:14px;max-height:220px;overflow-y:auto;font-size:0.8rem;background:var(--bg);border-radius:8px;padding:12px}
+  .import-preview table{font-size:0.75rem;width:100%}
+  .import-preview th{color:var(--text-muted);padding:3px 8px;font-size:0.68rem}
+  .import-preview td{padding:3px 8px}
+  .empty-state{text-align:center;padding:80px 20px;color:var(--text-muted)}
+  .empty-state h2{font-size:1.1rem;color:var(--text-dim);margin-bottom:6px;font-weight:600}
+  .empty-state p{font-size:0.85rem}
+  .toast{position:fixed;bottom:20px;right:20px;padding:10px 18px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;font-size:0.8rem;z-index:200;opacity:0;transform:translateY(8px);transition:all 0.25s;pointer-events:none;font-family:'DM Sans',sans-serif}
+  .toast.show{opacity:1;transform:translateY(0)}
+  .toast.error{border-color:rgba(255,107,122,0.4)}
+  .toast.success{border-color:rgba(74,222,128,0.4)}
+  /* Edit tracking */
+  .edit-meta{margin-top:14px;padding:8px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;font-size:0.72rem;color:var(--text-muted);line-height:1.6}
+  .edit-meta b{color:var(--accent);font-weight:600}
+  .edit-meta .em-row{display:flex;gap:6px;flex-wrap:wrap}
+  .edit-meta .em-hist{margin-top:4px;padding-top:4px;border-top:1px solid var(--border)}
+  .changelog-filter{width:100%;padding:8px 12px;margin-bottom:10px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:inherit;font-size:0.8rem;outline:none}
+  #changeLogEntries{max-height:60vh;overflow-y:auto}
+  #changeLogEntries .import-log-entry{white-space:normal;flex-wrap:wrap}
+  /* Import log footer */
+  #importLogEntries{display:flex;flex-direction:column;gap:2px;max-height:60vh;overflow-y:auto}
+  .import-log-empty{font-size:0.8rem;color:var(--text-muted);text-align:center;padding:20px 0}
+  .import-log-entry{display:flex;align-items:center;gap:6px;white-space:nowrap;font-size:0.78rem;color:var(--text-muted);padding:7px 8px;border-radius:8px}
+  .import-log-entry:hover{background:var(--surface2)}
+  .import-log-entry .log-num{font-size:0.7rem;color:var(--text-muted);font-weight:700;min-width:20px}
+  .log-count{display:inline-block;margin-left:5px;font-size:0.65rem;font-weight:700;padding:1px 6px;border-radius:999px;background:var(--surface2);color:var(--text-muted)}
+  .import-log-entry .log-who{color:var(--accent);font-weight:600}
+  .import-log-entry .log-sep{color:var(--border-light);margin:0 1px}
+  .import-log-entry .log-del{margin-left:auto;background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:0.7rem;padding:0 2px;line-height:1;opacity:0.5;transition:opacity 0.15s}
+  .import-log-entry .log-del:hover{opacity:1;color:var(--red)}
+  </style>
+</head>
+<body>
+
+<div id="loginView">
+  <div class="bg-glow bg-glow-1"></div>
+  <div class="bg-glow bg-glow-2"></div>
+  <div class="login-container">
+    <div class="login-card">
+      <div class="login-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+          <path d="M7 11V7a5 5 0 0110 0v4"/>
+          <circle cx="12" cy="16" r="1"/>
+        </svg>
+      </div>
+      <h1 class="login-title">Attendance Tracker</h1>
+      <p class="login-sub">USQ GM &mdash; Restricted access. Sign in to continue</p>
+      <div class="input-group">
+        <label>Email</label>
+        <input type="email" id="emailInput" placeholder="you@example.com" autocomplete="email">
+      </div>
+      <div class="input-group">
+        <label>Password</label>
+        <input type="password" id="passwordInput" placeholder="Enter password" autocomplete="current-password">
+        <button class="toggle-pw" onclick="togglePassword()" type="button">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
+          </svg>
+        </button>
+      </div>
+      <button class="login-btn" id="loginBtn" onclick="handleLogin()">Sign In</button>
+      <div class="error-msg" id="errorMsg">Invalid email or password. Please try again.</div>
+    </div>
+  </div>
+</div>
+
+<div id="appView">
+  <div class="key-section">
+    <div class="key-title">KEY <span class="store-badge">USQ GM</span></div>
+    <div class="key-row">
+      <div class="key-item"><div class="key-swatch" style="background:#6c8cff"></div> 1st</div>
+      <div class="key-item"><div class="key-swatch" style="background:#facc15"></div> 2nd</div>
+      <div class="key-item"><div class="key-swatch" style="background:#f59e0b"></div> Final</div>
+      <div class="key-item"><div class="key-swatch" style="background:#ef4444"></div> Terminated</div>
+      <div class="key-sep"></div>
+      <div class="key-item"><div class="key-swatch" style="background:#38bdf8"></div> PS&amp;STO used</div>
+      <div class="key-item"><span style="color:#facc15;font-size:0.85rem">&#9733;</span> Has note</div>
+      <div class="key-sep"></div>
+      <div class="key-item"><span class="ca-folder" style="margin-left:0;cursor:default"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></span> Corrective action needed (click to open)</div>
+    </div>
+  </div>
+  <div class="ca-banner" id="caBanner"></div>
+  <div class="toolbar">
+    <input class="search-box" id="searchBox" type="text" placeholder="Search budtenders..." oninput="renderTable()">
+    <div class="toolbar-right">
+      <div class="dropdown">
+        <button class="dropdown-btn" id="viewModeBtn" onclick="toggleViewDropdown(event)">Normal View</button>
+        <div class="dropdown-menu" id="viewModeMenu">
+          <div class="dropdown-item selected" data-mode="normal" onclick="setViewMode('normal')">Normal View</div>
+          <div class="dropdown-item" data-mode="week" onclick="setViewMode('week')">Week View</div>
+          <div class="dropdown-item" data-mode="month" onclick="setViewMode('month')">Month View</div>
+        </div>
+      </div>
+      <div class="dropdown">
+        <button class="dropdown-btn" id="monthFilterBtn" onclick="toggleMonthFilterDropdown(event)">All Months</button>
+        <div class="dropdown-menu" id="monthFilterMenu"></div>
+      </div>
+      <button class="btn" id="hideBtn" onclick="toggleShowHidden()">Show Hidden</button>
+      <button class="btn" onclick="openAddPerson()">&#43; Budtender</button>
+      <button class="btn" onclick="openAddDay()">&#43; Day</button>
+      <button class="btn" onclick="openChangeLog()">&#9998; Change Log</button>
+      <button class="btn" onclick="exportCSV()">&#8595; Export</button>
+      <button class="btn" id="undoBtn" onclick="undoLast()" disabled title="Undo last change (Ctrl/Cmd+Z)">&#8630; Undo</button>
+      <button class="btn danger" onclick="confirmClear()">Clear</button>
+      <button class="btn" onclick="handleLock()">&#128274; Lock</button>
+    </div>
+  </div>
+  <div class="table-wrap" id="tableWrap">
+    <div class="empty-state" id="emptyState">
+      <h2>No attendance data yet</h2>
+      <p>Click &ldquo;+ Budtender&rdquo; to add people, then &ldquo;+ Day&rdquo; to add date columns</p>
+    </div>
+    <table id="mainTable" style="display:none">
+      <thead id="tableHead"></thead>
+      <tbody id="tableBody"></tbody>
+    </table>
+  </div>
+</div>
+
+<div class="dropdown-menu" id="ptsColMenu" style="position:fixed;z-index:100">
+  <div class="dropdown-item selected" data-mode="annual" onclick="setPtsMode('annual')">Annual Pts</div>
+  <div class="dropdown-item" data-mode="60days" onclick="setPtsMode('60days')">Last 60 Days</div>
+</div>
+
+<div class="modal-overlay" id="editModal">
+  <div class="modal">
+    <h3 id="editTitle" style="font-style:italic">Edit Entry</h3>
+    <p class="subtitle" id="editSubtitle"></p>
+    <div id="editNote" style="display:none;margin-bottom:14px;padding:8px 12px;background:rgba(108,140,255,0.06);border:1px solid rgba(108,140,255,0.15);border-radius:8px;font-size:0.75rem;color:var(--text-dim);line-height:1.5"></div>
+    <div style="margin-bottom:14px">
+      <label style="display:block;font-size:0.72rem;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:6px">Value</label>
+      <input type="text" id="editInput" placeholder="e.g. 0.5, 1, Excused, or blank to clear" style="width:100%;padding:10px 14px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:inherit;font-size:0.85rem;outline:none" onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--border)'">
+    </div>
+    <div class="modal-btns" style="margin-bottom:8px">
+      <button class="btn" onclick="fillEdit('0.5')">0.5</button>
+      <button class="btn" onclick="fillEdit('1')">1</button>
+      <button class="btn" onclick="fillEdit('NC/NS')">NC/NS</button>
+      <button class="btn" onclick="fillEdit('Excused')">Excused</button>
+      <button class="btn" onclick="fillEdit('')">Clear</button>
+    </div>
+    <div class="modal-btns">
+      <button class="btn" style="color:#6c8cff;border-color:rgba(108,140,255,0.4)" onclick="fillEdit('1st')">1st</button>
+      <button class="btn" style="color:#facc15;border-color:rgba(250,204,21,0.4)" onclick="fillEdit('2nd')">2nd</button>
+      <button class="btn" style="color:#f59e0b;border-color:rgba(245,158,11,0.4)" onclick="fillEdit('Final')">Final</button>
+      <button class="btn" style="color:#ef4444;border-color:rgba(239,68,68,0.4)" onclick="fillEdit('Terminated')">Terminated</button>
+      <button class="btn" style="color:#a78bfa;border-color:rgba(167,139,250,0.4)" onclick="fillEdit('Completed')">Completed</button>
+    </div>
+    <div class="modal-btns" style="margin-top:2px">
+      <button class="btn" style="color:#38bdf8;border-color:rgba(56,189,248,0.45)" onclick="addSto(15)">+15 min NYC-PS&amp;STO</button>
+      <button class="btn" style="color:#38bdf8;border-color:rgba(56,189,248,0.45)" onclick="addSto(60)">+1 hr NYC-PS&amp;STO</button>
+    </div>
+    <div style="margin-top:16px">
+      <div class="note-label-row">
+        <div class="note-label"><span class="star-ico">&#9733;</span> Note</div>
+        <button class="btn" id="clearNoteBtn" onclick="clearUserNote()" style="font-size:0.68rem;padding:3px 8px">Clear note</button>
+      </div>
+      <textarea id="userNoteInput" class="note-input" placeholder="Add a note about this day (optional)"></textarea>
+    </div>
+    <div id="editMeta" class="edit-meta" style="display:none"></div>
+    <div class="modal-actions" style="justify-content:space-between">
+      <div style="display:flex;gap:8px">
+        <button class="btn" onclick="toggleHidePerson()" id="hidePersonBtn" style="font-size:0.72rem">Hide Budtender</button>
+        <button class="btn danger" onclick="deletePerson()" style="font-size:0.72rem">Delete</button>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="btn" onclick="closeEdit()">Cancel</button>
+        <button class="btn primary" onclick="saveEdit()">Save</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="caModal">
+  <div class="modal ca-modal">
+    <h3 style="font-style:italic">Corrective Action</h3>
+    <p class="subtitle" id="caSubtitle"></p>
+    <div class="ca-grid">
+      <div><label>Corrective Action</label><select id="caStage" onchange="caRefresh()"><option value="first">First Warning</option><option value="second">Second Warning</option><option value="final">Final Warning</option><option value="termination">Termination</option></select></div>
+      <div><label>Date</label><input type="date" id="caDate" onchange="caRefresh()"></div>
+      <div><label>Employee ID</label><input type="text" id="caEmpId" oninput="caRefresh()" placeholder="Not on file"></div>
+      <div><label>Job Title</label><input type="text" id="caTitle" oninput="caRefresh()"></div>
+      <div><label>Direct Supervisor</label><input type="text" id="caSupervisor" oninput="caRefresh()"></div>
+      <div><label>Work Location</label><input type="text" id="caLocation" oninput="caRefresh()"></div>
+      <div><label>Email To (first name)</label><input type="text" id="caEmailTo" oninput="caRefresh()"></div>
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:8px">
+      <button class="btn primary" id="caTabForm" onclick="caSetView('form')">Form</button>
+      <button class="btn" id="caTabEmail" onclick="caSetView('email')">Email</button>
+    </div>
+    <iframe id="caEmailPreview" title="Email preview" style="display:none;width:100%;height:48vh;border:0;border-radius:8px;background:#fff"></iframe>
+    <iframe id="caPreview" title="Corrective action preview" style="width:100%;height:48vh;border:0;border-radius:8px;background:#fff"></iframe>
+    <div class="modal-actions" style="justify-content:space-between;flex-wrap:wrap">
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn" onclick="caDownload()">&#8595; Download (.doc)</button>
+        <button class="btn" onclick="caPrint()">&#128438; Print / Save PDF</button>
+        <button class="btn" onclick="caCopyEmail()">&#9993; Copy email</button>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn" onclick="closeCA()">Close</button>
+        <button class="btn primary" id="caRecordBtn" onclick="caRecord()">Record in tracker</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="changeLogModal" onclick="if(event.target===this)closeChangeLog()">
+  <div class="modal" style="width:620px">
+    <h3>Change Log</h3>
+    <p class="subtitle">Every manual edit to an entry or note, newest first</p>
+    <input type="text" id="changeLogFilter" class="changelog-filter" placeholder="Filter by budtender or editor" oninput="renderChangeLog()">
+    <div id="changeLogEntries"></div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeChangeLog()">Close</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="addPersonModal" onclick="if(event.target===this)closeAddPerson()">
+  <div class="modal" style="width:420px">
+    <h3>Add Budtender</h3>
+    <p class="subtitle">Enter their name as First Last</p>
+    <input type="text" id="addPersonInput" class="changelog-filter" placeholder="e.g. Jane Smith" onkeydown="if(event.key==='Enter')saveAddPerson()">
+    <div class="modal-actions">
+      <button class="btn" onclick="closeAddPerson()">Cancel</button>
+      <button class="btn primary" onclick="saveAddPerson()">Add</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="addDayModal" onclick="if(event.target===this)closeAddDay()">
+  <div class="modal" style="width:420px">
+    <h3>Add Day</h3>
+    <p class="subtitle">Adds a date column. Empty days you added can be removed here too.</p>
+    <input type="date" id="addDayInput" class="changelog-filter" onkeydown="if(event.key==='Enter')saveAddDay()">
+    <div id="addDayList" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:4px"></div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeAddDay()">Close</button>
+      <button class="btn primary" onclick="saveAddDay()">Add Day</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const firebaseConfig = {
+  apiKey: "AIzaSyCmG0g3EflxKE6TmMFhEtaVuM7IJcW89io",
+  authDomain: "usq-attendance-tracker.firebaseapp.com",
+  databaseURL: "https://usq-attendance-tracker-default-rtdb.firebaseio.com",
+  projectId: "usq-attendance-tracker",
+  storageBucket: "usq-attendance-tracker.firebasestorage.app",
+  messagingSenderId: "933018703730",
+  appId: "1:933018703730:web:4aa8328d1079ed691bafeb"
+};
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+// ── Restricted, standalone tracker: only this account may use it ──
+const ALLOWED_EMAIL = 'jennifer.bartholomeo@thetravelagency.co';
+function isAllowedEmail(e) { return (e || '').trim().toLowerCase() === ALLOWED_EMAIL; }
+const dataRef = firebase.database().ref('attendance_usq_gm');
+const daysRef = firebase.database().ref('attendance_usq_gm_days');
+const employeesRef = firebase.database().ref('employees_usq_gm');
+const caAlertsRef = firebase.database().ref('caAlertsSent_usq_gm');
+
+let currentUserEmail = '';
+
+
+function togglePassword() {
+  const i = document.getElementById('passwordInput');
+  i.type = i.type === 'password' ? 'text' : 'password';
+}
+document.getElementById('passwordInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') handleLogin();
+  document.getElementById('errorMsg').style.display = 'none';
+});
+document.getElementById('emailInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') document.getElementById('passwordInput').focus();
+  document.getElementById('errorMsg').style.display = 'none';
+});
+async function handleLogin() {
+  const email = document.getElementById('emailInput').value.trim();
+  const pw = document.getElementById('passwordInput').value;
+  if (!email || !pw) return;
+  if (!isAllowedEmail(email)) {
+    document.getElementById('errorMsg').textContent = 'This tracker is restricted. Your account does not have access.';
+    document.getElementById('errorMsg').style.display = 'block';
+    document.getElementById('passwordInput').value = '';
+    return;
+  }
+  const btn = document.getElementById('loginBtn');
+  btn.disabled = true; btn.textContent = 'Signing in...';
+  try {
+    await auth.signInWithEmailAndPassword(email, pw);
+  } catch(err) {
+    document.getElementById('errorMsg').textContent = 'Invalid email or password. Please try again.';
+    document.getElementById('errorMsg').style.display = 'block';
+    document.getElementById('passwordInput').value = '';
+    document.getElementById('passwordInput').focus();
+    btn.disabled = false; btn.textContent = 'Sign In';
+  }
+}
+function handleLock() {
+  undoStack = []; updateUndoBtn();
+  auth.signOut().then(() => {
+    document.getElementById('loginView').style.display = 'flex';
+    document.getElementById('appView').style.display = 'none';
+    document.getElementById('passwordInput').value = '';
+    document.getElementById('emailInput').value = '';
+    setTimeout(() => document.getElementById('emailInput').focus(), 100);
+  });
+}
+function showApp() {
+  document.getElementById('loginView').style.display = 'none';
+  document.getElementById('appView').style.display = 'flex';
+  loadData();
+  loadDays();
+  loadEmployees();
+  loadCAAlerts();
+}
+auth.onAuthStateChanged(user => {
+  if (user && !isAllowedEmail(user.email)) {
+    auth.signOut();
+    document.getElementById('errorMsg').textContent = 'This tracker is restricted. Your account does not have access.';
+    document.getElementById('errorMsg').style.display = 'block';
+    return;
+  }
+  if (user) {
+    currentUserEmail = user.email || '';
+    showApp();
+  } else {
+    currentUserEmail = '';
+    document.getElementById('loginView').style.display = 'flex';
+    document.getElementById('appView').style.display = 'none';
+    setTimeout(() => document.getElementById('emailInput').focus(), 100);
+  }
+});
+
+let attendanceData = {};
+let allDates = [];
+let editingPerson = null;
+let editingDate = null;
+let pendingImport = null;
+let viewMode = 'normal';
+let ptsMode = 'annual';
+let monthFilter = 'all';
+let initialLoad = true;
+
+function loadData() {
+  dataRef.on('value', snap => {
+    attendanceData = snap.val() || {};
+    caDataLoaded = true;
+    committedState = JSON.stringify(attendanceData);
+    localStorage.setItem('bt_attendance_usq_gm', JSON.stringify(attendanceData));
+    rebuildDates(); renderTable();
+    if (initialLoad) {
+      initialLoad = false;
+      setTimeout(() => { const wrap = document.getElementById('tableWrap'); wrap.scrollLeft = wrap.scrollWidth; }, 50);
+    }
+  }, err => {
+    console.warn('Firebase error, using localStorage:', err.message);
+    try { attendanceData = JSON.parse(localStorage.getItem('bt_attendance_usq_gm') || '{}'); } catch(e) { attendanceData = {}; }
+    rebuildDates(); renderTable();
+    if (initialLoad) {
+      initialLoad = false;
+      setTimeout(() => { const wrap = document.getElementById('tableWrap'); wrap.scrollLeft = wrap.scrollWidth; }, 50);
+    }
+  });
+}
+// ── Undo ──
+// committedState = last saved/synced data. Every saveData() pushes it onto the stack first.
+const UNDO_LIMIT = 25;
+let undoStack = [];
+let committedState = '{}';
+function updateUndoBtn() {
+  const b = document.getElementById('undoBtn');
+  if (!b) return;
+  b.disabled = !undoStack.length;
+  b.textContent = '\u21B6 Undo' + (undoStack.length ? ' (' + undoStack.length + ')' : '');
+}
+function undoLast() {
+  if (!undoStack.length) { toast('Nothing to undo', 'error'); return; }
+  attendanceData = JSON.parse(undoStack.pop());
+  committedState = JSON.stringify(attendanceData);
+  dataRef.set(attendanceData).catch(err => toast('Undo failed: ' + err.message, 'error'));
+  localStorage.setItem('bt_attendance_usq_gm', committedState);
+  rebuildDates(); renderTable(); updateUndoBtn();
+  toast('Last change undone', 'success');
+}
+document.addEventListener('keydown', e => {
+  if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'z') {
+    const tag = (document.activeElement && document.activeElement.tagName) || '';
+    if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+    if (document.querySelector('.modal-overlay.active')) return;
+    if (document.getElementById('undoBtn').offsetParent === null) return;
+    e.preventDefault(); undoLast();
+  }
+});
+function saveData() {
+  undoStack.push(committedState);
+  if (undoStack.length > UNDO_LIMIT) undoStack.shift();
+  committedState = JSON.stringify(attendanceData);
+  updateUndoBtn();
+  dataRef.set(attendanceData).catch(err => toast('Save failed: ' + err.message, 'error'));
+  localStorage.setItem('bt_attendance_usq_gm', JSON.stringify(attendanceData));
+}
+function toggleViewDropdown(e) {
+  e.stopPropagation();
+  document.getElementById('viewModeMenu').classList.toggle('active');
+  document.getElementById('ptsColMenu').classList.remove('active');
+  document.getElementById('monthFilterMenu').classList.remove('active');
+}
+function setViewMode(mode) {
+  viewMode = mode;
+  const labels = { normal: 'Normal View', week: 'Week View', month: 'Month View' };
+  document.getElementById('viewModeBtn').textContent = labels[mode];
+  document.querySelectorAll('#viewModeMenu .dropdown-item').forEach(el => el.classList.toggle('selected', el.dataset.mode === mode));
+  document.getElementById('viewModeMenu').classList.remove('active');
+  renderTable();
+}
+function setPtsMode(mode) {
+  ptsMode = mode;
+  document.querySelectorAll('#ptsColMenu .dropdown-item').forEach(el => el.classList.toggle('selected', el.dataset.mode === mode));
+  document.getElementById('ptsColMenu').classList.remove('active');
+  renderTable();
+}
+function togglePtsDropdown(e) {
+  e.stopPropagation();
+  const menu = document.getElementById('ptsColMenu');
+  const rect = e.currentTarget.getBoundingClientRect();
+  menu.style.top = (rect.bottom + 4) + 'px';
+  menu.style.left = rect.left + 'px';
+  menu.classList.toggle('active');
+  document.getElementById('viewModeMenu').classList.remove('active');
+  document.getElementById('monthFilterMenu').classList.remove('active');
+}
+function toggleMonthFilterDropdown(e) {
+  e.stopPropagation();
+  buildMonthFilterMenu();
+  document.getElementById('monthFilterMenu').classList.toggle('active');
+  document.getElementById('viewModeMenu').classList.remove('active');
+  document.getElementById('ptsColMenu').classList.remove('active');
+}
+function buildMonthFilterMenu() {
+  const monthSet = new Set();
+  allDates.forEach(d => monthSet.add(d.substring(0, 7)));
+  const months = Array.from(monthSet).sort().reverse();
+  const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  const menu = document.getElementById('monthFilterMenu');
+  let html = `<div class="dropdown-item ${monthFilter==='all'?'selected':''}" onclick="setMonthFilter('all')">All Months</div>`;
+  months.forEach(mk => {
+    const [y,m] = mk.split('-');
+    html += `<div class="dropdown-item ${monthFilter===mk?'selected':''}" onclick="setMonthFilter('${mk}')">${monthNames[parseInt(m)-1]} ${y}</div>`;
+  });
+  menu.innerHTML = html;
+}
+function setMonthFilter(mk) {
+  monthFilter = mk;
+  const btn = document.getElementById('monthFilterBtn');
+  if (mk === 'all') { btn.textContent = 'All Months'; }
+  else {
+    const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+    const [y,m] = mk.split('-');
+    btn.textContent = monthNames[parseInt(m)-1] + ' ' + y;
+  }
+  document.getElementById('monthFilterMenu').classList.remove('active');
+  renderTable();
+}
+document.addEventListener('click', e => {
+  if (!e.target.closest('.dropdown') && !e.target.closest('.header-dropdown') && !e.target.closest('#ptsColMenu')) {
+    document.getElementById('viewModeMenu').classList.remove('active');
+    document.getElementById('ptsColMenu').classList.remove('active');
+    document.getElementById('monthFilterMenu').classList.remove('active');
+  }
+});
+function calcLateMinutes(shiftVal, clockVal) {
+  if (!shiftVal || !clockVal) return null;
+  const shiftStart = parseTimeToMins(shiftVal.split('-')[0].trim());
+  if (shiftStart === null) return null;
+  let clockIn = null;
+  const clockNum = parseFloat(clockVal);
+  if (!isNaN(clockNum) && clockNum > 0 && clockNum < 1) { clockIn = Math.round(clockNum * 1440); }
+  else { clockIn = parseTimeToMins(clockVal.trim()); }
+  if (clockIn === null) return null;
+  let diff = clockIn - shiftStart;
+  if (diff < -720) diff += 1440;
+  if (diff < 0) return null;
+  return diff;
+}
+function parseTimeToMins(timeStr) {
+  if (!timeStr) return null;
+  const match = timeStr.match(/(\d{1,2}):(\d{2})\s*(AM|PM)?/i);
+  if (!match) return null;
+  let h = parseInt(match[1]), m = parseInt(match[2]);
+  const ampm = (match[3]||'').toUpperCase();
+  if (ampm === 'PM' && h < 12) h += 12;
+  if (ampm === 'AM' && h === 12) h = 0;
+  return h * 60 + m;
+}
+function parseMins(s) {
+  if (!s) return null;
+  const minMatch = s.match(/(\d+)\s*min/i);
+  if (minMatch) { let total = parseInt(minMatch[1])||0; const hrMatch = s.match(/(\d+)\s*hour/i); if (hrMatch) total += (parseInt(hrMatch[1])||0)*60; return total; }
+  const hms = s.match(/(\d+):(\d+)/);
+  if (hms) return (parseInt(hms[1])||0)*60+(parseInt(hms[2])||0);
+  const n = parseFloat(s);
+  if (isNaN(n)) return null;
+  if (n > 0 && n < 1) return Math.round(n * 1440);
+  return n;
+}
+function rebuildDates() {
+  const s = new Set();
+  Object.values(attendanceData).forEach(p => { if (p.dates) Object.keys(p.dates).forEach(d => s.add(d)); });
+  Object.keys(manualDays || {}).forEach(d => s.add(d));
+  allDates = Array.from(s).filter(d => /^\d{4}-\d{2}-\d{2}$/.test(d)).sort();
+}
+function getPoints(val) {
+  if (!val) return 0;
+  const v = val.toString().trim();
+  if (v === '1' || v === '1.0') return 1;
+  if (v === '0.5') return 0.5;
+  return 0;
+}
+function getWriteupPts(dates) {
+  const writeupTypes = ['1st','2nd','final','terminated','term','completed'];
+  let lastWriteupDate = null;
+  const sortedEntries = Object.entries(dates).sort((a,b) => a[0].localeCompare(b[0]));
+  sortedEntries.forEach(([d,v]) => { const val=(v||'').toString().trim().toLowerCase(); if (writeupTypes.includes(val)) lastWriteupDate=d; });
+  if (!lastWriteupDate) return 0;
+  let pts = 0;
+  sortedEntries.forEach(([d,v]) => { if (d > lastWriteupDate) pts += getPoints(v); });
+  return pts;
+}
+function getAnnualPts(dates) { let pts=0; Object.values(dates).forEach(v => { pts+=getPoints(v); }); return pts; }
+function parseDate(dateStr) {
+  if (!dateStr) return null;
+  const s = dateStr.toString().trim();
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) { const d=new Date(s.substring(0,10)+'T00:00:00'); return isNaN(d)?null:d; }
+  const slash = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);
+  if (slash) { let [,m,d,y]=slash; y=y.length===2?'20'+y:y; const dt=new Date(parseInt(y),parseInt(m)-1,parseInt(d)); return isNaN(dt)?null:dt; }
+  const d=new Date(s); return isNaN(d)?null:d;
+}
+function getLast60Pts(dates) {
+  const today = new Date(); today.setHours(0,0,0,0);
+  const cutoff = new Date(today); cutoff.setDate(cutoff.getDate() - 60);
+  let pts = 0;
+  Object.entries(dates).forEach(([d,v]) => {
+    const ed = parseDate(d); if (!ed) return; ed.setHours(0,0,0,0);
+    if (ed >= cutoff && ed <= today) pts += getPoints(v);
+  });
+  return pts;
+}
+function isTerminated(dates) { return Object.values(dates).some(v => /^(terminated|term)$/i.test((v||'').toString().trim())); }
+// ── NYC Paid Safe & Sick Time (PS&STO) ──────────────────────────────────────
+// Annual balance per budtender, in hours.
+const STO_ANNUAL_HOURS = 32;
+// A sick-time cell is stored as "STO H:MM" (e.g. "STO 0:15", "STO 1:00").
+function parseStoMins(v) {
+  if (v === null || v === undefined) return null;
+  const m = v.toString().trim().match(/^STO\s+(\d+):(\d{2})$/i);
+  if (!m) return null;
+  return parseInt(m[1]) * 60 + parseInt(m[2]);
+}
+function fmtMins(t) { const h = Math.floor(t / 60), m = t % 60; return h + ':' + String(m).padStart(2, '0'); }
+function getStoUsedMins(dates) {
+  let s = 0;
+  Object.values(dates || {}).forEach(v => { const mm = parseStoMins(v); if (mm !== null) s += mm; });
+  return s;
+}
+function getStoRemaining(dates) { return Math.max(0, STO_ANNUAL_HOURS - getStoUsedMins(dates) / 60); }
+function fmtStoHrs(h) { return (h % 1 === 0) ? String(h) : parseFloat(h.toFixed(2)).toString(); }
+function stoColorClass(h) {
+  if (h >= 25) return 'pts-green';
+  if (h >= 9)  return 'pts-yellow';
+  if (h >= 1)  return 'pts-orange';
+  return 'pts-red';
+}
+// Adds sick time to the value currently in the edit box (accumulates if already STO).
+function addSto(mins) {
+  const input = document.getElementById('editInput');
+  let cur = parseStoMins(input.value.trim());
+  if (cur === null) cur = 0;
+  input.value = 'STO ' + fmtMins(cur + mins);
+}
+function getLatestWriteup(dates) {
+  const writeupTypes=['1st','2nd','final','terminated','term','completed'];
+  let latest=null;
+  Object.entries(dates).sort((a,b)=>a[0].localeCompare(b[0])).forEach(([d,v]) => { const val=(v||'').toString().trim().toLowerCase(); if (writeupTypes.includes(val)) latest=val; });
+  return latest;
+}
+function getNameColor(dates, terminated) {
+  if (terminated) return 'name-terminated';
+  const hasWriteup=getLatestWriteup(dates)!==null;
+  const pts=hasWriteup?getWriteupPts(dates):getLast60Pts(dates);
+  if (pts>=3) return 'name-red';
+  if (pts>=1.5) return 'name-orange';
+  return 'name-green';
+}
+function getWriteupTagHtml(dates) {
+  const wu=getLatestWriteup(dates);
+  if (!wu) return '';
+  if (wu==='1st') return '<span class="writeup-tag wu-1st">1st</span>';
+  if (wu==='2nd') return '<span class="writeup-tag wu-2nd">2nd</span>';
+  if (wu==='final') return '<span class="writeup-tag wu-final">Final</span>';
+  if (wu==='terminated'||wu==='term') return '<span class="writeup-tag wu-term">Term</span>';
+  return '';
+}
+let showHidden=false;
+function toggleShowHidden() {
+  showHidden=!showHidden;
+  const btn=document.getElementById('hideBtn');
+  btn.textContent=showHidden?'Hide Hidden':'Show Hidden';
+  btn.style.borderColor=showHidden?'rgba(108,140,255,0.4)':'';
+  btn.style.color=showHidden?'#6c8cff':'';
+  renderTable();
+}
+function toggleHidePerson() {
+  if (!editingPerson) return;
+  const p=attendanceData[editingPerson]; if (!p) return;
+  const name=p.displayName||editingPerson;
+  if (p.hidden) { p.hidden=false; toast(name+' is now visible','success'); }
+  else { if (!confirm('Hide '+name+' from the tracker?')) return; p.hidden=true; toast(name+' hidden','success'); }
+  saveData(); renderTable(); closeEdit();
+}
+function ptsColor(pts) {
+  if (pts>=3) return 'pts-red';
+  if (pts>=2) return 'pts-orange';
+  if (pts>=1) return 'pts-yellow';
+  if (pts>0) return 'pts-green';
+  return 'pts-zero';
+}
+function cellHtml(val) {
+  if (!val) return '';
+  const v=val.toString().trim();
+  const stoM=parseStoMins(v);
+  if (stoM!==null) return '<span class="val-sto">NYC-PS&amp;STO '+fmtMins(stoM)+'</span>';
+  if (v==='0.5') return '<span class="val-point">0.5</span>';
+  if (v==='1'||v==='1.0') return '<span class="val-one">1</span>';
+  if (/^excused$/i.test(v)) return '<span class="val-excused">Excused</span>';
+  if (v==='1st') return '<span class="val-1st">1st</span>';
+  if (v==='2nd') return '<span class="val-2nd">2nd</span>';
+  if (/^final$/i.test(v)) return '<span class="val-final">Final</span>';
+  if (/^term/i.test(v)) return '<span class="val-term">TERM</span>';
+  return '<span style="color:var(--text-dim)">'+v+'</span>';
+}
+function fmtDate(d) {
+  try { const dt=new Date(d+'T00:00:00'); return (dt.getMonth()+1).toString().padStart(2,'0')+'/'+dt.getDate().toString().padStart(2,'0'); }
+  catch(e) { return d; }
+}
+function getWeekKey(dateStr) {
+  const d=new Date(dateStr+'T00:00:00'), day=d.getDay(), diff=day===0?-6:1-day;
+  d.setDate(d.getDate()+diff); return d.toISOString().split('T')[0];
+}
+function getMonthKey(dateStr) { return dateStr.substring(0,7); }
+function fmtWeek(weekKey) {
+  const d=new Date(weekKey+'T00:00:00'), end=new Date(d); end.setDate(d.getDate()+6);
+  return (d.getMonth()+1)+'/'+d.getDate()+' - '+(end.getMonth()+1)+'/'+end.getDate();
+}
+function fmtMonth(monthKey) {
+  const [y,m]=monthKey.split('-');
+  return ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][parseInt(m)-1]+' '+y.substring(2);
+}
+function buildPeriods() {
+  if (viewMode==='normal') return null;
+  const keyFn=viewMode==='week'?getWeekKey:getMonthKey, fmtFn=viewMode==='week'?fmtWeek:fmtMonth;
+  const periodSet=new Set(); allDates.forEach(d=>periodSet.add(keyFn(d)));
+  return { periods:Array.from(periodSet).sort(), keyFn, fmtFn };
+}
+function getPeriodPoints(dates,periodKey,keyFn) {
+  let pts=0; Object.entries(dates).forEach(([d,v])=>{ if (keyFn(d)===periodKey) pts+=getPoints(v); }); return pts;
+}
+function renderTable() {
+  const q=(document.getElementById('searchBox').value||'').toLowerCase();
+  const people=Object.entries(attendanceData).filter(([k,v])=>(v.displayName||k).toLowerCase().includes(q)).sort((a,b)=>(a[1].displayName||a[0]).localeCompare(b[1].displayName||b[0]));
+  if (!people.length&&!Object.keys(attendanceData).length) {
+    document.getElementById('emptyState').style.display='block';
+    document.getElementById('mainTable').style.display='none'; return;
+  }
+  document.getElementById('emptyState').style.display='none';
+  document.getElementById('mainTable').style.display='';
+  const periodInfo=buildPeriods();
+  const ptsLabel=ptsMode==='60days'?'Last 60 Days':'Annual Pts';
+  const filteredDates=monthFilter==='all'?allDates:allDates.filter(d=>d.substring(0,7)===monthFilter);
+  let filteredPeriods=null;
+  if (periodInfo) {
+    if (monthFilter==='all') { filteredPeriods=periodInfo.periods; }
+    else if (viewMode==='month') { filteredPeriods=periodInfo.periods.filter(p=>p===monthFilter); }
+    else {
+      filteredPeriods=periodInfo.periods.filter(p=>{
+        const start=new Date(p+'T00:00:00');
+        for (let i=0;i<7;i++) { const day=new Date(start); day.setDate(start.getDate()+i); if (day.toISOString().substring(0,7)===monthFilter) return true; }
+        return false;
+      });
+    }
+  }
+  const headerCols=periodInfo
+    ?filteredPeriods.map(p=>`<th class="period-col">${periodInfo.fmtFn(p)}</th>`).join('')
+    :filteredDates.map(d=>`<th class="date-col">${fmtDate(d)}</th>`).join('');
+  document.getElementById('tableHead').innerHTML=`<tr><th title="NYC Paid Safe & Sick Time hours remaining (of ${STO_ANNUAL_HOURS})">PS&amp;STO</th><th>First Name</th><th>Last Name</th><th><span class="header-dropdown" onclick="togglePtsDropdown(event)">${ptsLabel}</span></th><th>Write-Up Pts</th>${headerCols}</tr>`;
+  const caPending=new Set(caPendingKeys());
+  document.getElementById('tableBody').innerHTML=people.map(([key,person])=>{
+    const name=person.displayName||key;
+    let fn='',ln='';
+    if (name.includes(',')) { const parts=name.split(',').map(s=>s.trim()); ln=parts[0]; fn=parts[1]||''; }
+    else { const parts=name.split(' ').map(s=>s.trim()).filter(Boolean); if (parts.length>=2) { fn=parts[0]; ln=parts.slice(1).join(' '); } else { fn=parts[0]||name; ln=''; } }
+    const dates=person.dates||{}, userNotes=person.userNotes||{};
+    const mainPts=ptsMode==='60days'?getLast60Pts(dates):getAnnualPts(dates);
+    const wp=getWriteupPts(dates);
+    if (!showHidden&&person.hidden) return '';
+    const termed=isTerminated(dates), nc=getNameColor(dates,termed), wuTag=getWriteupTagHtml(dates);
+    const caFolder=caPending.has(key)?`<button class="ca-folder" data-key="${escHtml(key)}" onclick="openCA(this.dataset.key)" title="Corrective action needed: ${CA_STAGES[caNextStage(dates)].label} (${fmtPts(caCurrentPts(dates))} pts). Click to open.">${CA_FOLDER_SVG}</button>`:'';
+    const stoRem=getStoRemaining(dates);
+    let cells;
+    if (periodInfo) {
+      cells=filteredPeriods.map(p=>{ const pts=getPeriodPoints(dates,p,periodInfo.keyFn); const display=pts===0?'<span style="color:var(--text-muted)">&#183;</span>':(pts%1===0?pts:pts.toFixed(1)); return `<td class="period-cell ${pts>0?ptsColor(pts):''}">${display}</td>`; }).join('');
+    } else {
+      cells=filteredDates.map(d=>{ const v=dates[d]||''; const hasUserNote=!!(userNotes[d]&&userNotes[d].trim()); const starHtml=hasUserNote?'<span class="note-star">&#9733;</span>':''; const lastEd=getCellEdits(person,d)[0]; const tip=[hasUserNote?userNotes[d]:'', lastEd?('Edited by '+lastEd.who+' \u00b7 '+fmtEditTs(lastEd.ts)):''].filter(Boolean).join('\n'); const titleAttr=tip?` title="${tip.replace(/&/g,'&amp;').replace(/"/g,'&quot;')}"`:'' ; return `<td class="date-cell" onclick="openEdit('${key.replace(/'/g,"\\'")}','${d}')"${titleAttr}>${cellHtml(v)}${starHtml}</td>`; }).join('');
+    }
+    return `<tr><td class="${stoColorClass(stoRem)}" title="${getStoUsedMins(dates)>0?fmtMins(getStoUsedMins(dates))+' used of '+STO_ANNUAL_HOURS+':00':'No PS&STO used'}">${fmtStoHrs(stoRem)}</td><td><span class="name-badge ${nc}">${fn}</span></td><td><span class="name-badge ${nc}">${ln}</span>${wuTag}${caFolder}</td><td class="${ptsColor(mainPts)}">${mainPts>0?mainPts%1===0?mainPts:mainPts.toFixed(1):'0'}</td><td class="${ptsColor(wp)}">${wp>0?wp%1===0?wp:wp.toFixed(1):'0'}</td>${cells}</tr>`;
+  }).join('');
+  updateCABanner();
+}
+function fmtDateLong(d) {
+  try { const dt=new Date(d+'T00:00:00'); return (dt.getMonth()+1).toString().padStart(2,'0')+'/'+dt.getDate().toString().padStart(2,'0')+'/'+dt.getFullYear(); }
+  catch(e) { return d; }
+}
+// ── Manual roster + day columns (no imports on this site) ──
+let manualDays = {};
+function loadDays() {
+  daysRef.on('value', snap => { manualDays = snap.val() || {}; rebuildDates(); renderTable(); },
+    err => console.warn('Days load failed:', err.message));
+}
+function openAddPerson() { const i=document.getElementById('addPersonInput'); i.value=''; document.getElementById('addPersonModal').classList.add('active'); setTimeout(()=>i.focus(),100); }
+function closeAddPerson() { document.getElementById('addPersonModal').classList.remove('active'); }
+function saveAddPerson() {
+  const raw = document.getElementById('addPersonInput').value.trim().replace(/\s+/g,' ');
+  if (!raw) return;
+  const key = raw.replace(/[.#$\[\]\/]/g, '');
+  const exists = Object.entries(attendanceData).find(([k,p]) => (p.displayName||k).toLowerCase() === raw.toLowerCase());
+  if (exists) { toast(raw + ' is already on the tracker', 'error'); return; }
+  attendanceData[key] = { displayName: raw, dates: {}, added: { who: editorName(), ts: Date.now() } };
+  saveData(); rebuildDates(); renderTable(); closeAddPerson();
+  toast('Added ' + raw, 'success');
+}
+function renderDayList() {
+  const used = new Set(); Object.values(attendanceData).forEach(p => Object.keys(p.dates||{}).forEach(d => used.add(d)));
+  const days = Object.keys(manualDays).sort().reverse();
+  document.getElementById('addDayList').innerHTML = days.map(d => used.has(d)
+    ? `<span class="btn" style="font-size:0.7rem;padding:3px 8px;opacity:0.6" title="Has entries, clear them first to remove">${fmtDate(d)}</span>`
+    : `<button class="btn" style="font-size:0.7rem;padding:3px 8px" onclick="removeDay('${d}')" title="Remove this empty day">${fmtDate(d)} &#x2715;</button>`).join('');
+}
+function openAddDay() { const i=document.getElementById('addDayInput'); i.value=toLocalYMD(new Date()); renderDayList(); document.getElementById('addDayModal').classList.add('active'); }
+function closeAddDay() { document.getElementById('addDayModal').classList.remove('active'); }
+function saveAddDay() {
+  const d = document.getElementById('addDayInput').value;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return;
+  if (allDates.includes(d)) { toast(fmtDate(d) + ' is already a column', 'error'); return; }
+  manualDays[d] = true;
+  daysRef.child(d).set(true).catch(err => toast('Save failed: ' + err.message, 'error'));
+  rebuildDates(); renderTable(); renderDayList();
+  setTimeout(() => { const w=document.getElementById('tableWrap'); w.scrollLeft=w.scrollWidth; }, 50);
+  toast('Added ' + fmtDate(d), 'success');
+}
+function removeDay(d) {
+  delete manualDays[d];
+  daysRef.child(d).remove().catch(err => toast('Remove failed: ' + err.message, 'error'));
+  rebuildDates(); renderTable(); renderDayList();
+}
+// ── Edit tracking: who changed what, stored per cell in person.edits[date] ──
+const EDIT_HISTORY_LIMIT = 10;
+function editorName() { return (currentUserEmail || '').split('@')[0] || 'unknown'; }
+function fmtEditTs(ts) {
+  const d = new Date(ts);
+  return (d.getMonth()+1)+'/'+d.getDate()+'/'+String(d.getFullYear()).slice(2)+' '+d.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',hour12:true});
+}
+function getCellEdits(p, dt) {
+  const e = p && p.edits && p.edits[dt];
+  if (!e) return [];
+  return (Array.isArray(e) ? e : Object.values(e)).filter(Boolean).sort((a,b)=>b.ts-a.ts);
+}
+function describeEdit(e) {
+  const parts = [];
+  if (e.from !== e.to) {
+    const f = e.from ? escHtml(e.from) : '<i>blank</i>', t = e.to ? escHtml(e.to) : '<i>blank</i>';
+    parts.push(f + ' &rarr; ' + t);
+  }
+  if (e.noteChanged) parts.push(e.noteTo ? 'note: "' + escHtml(e.noteTo) + '"' : 'note removed');
+  return parts.join(' &#183; ') || 'saved';
+}
+function recordEdit(pk, dt, from, to, noteFrom, noteTo) {
+  if (from === to && noteFrom === noteTo) return;
+  const p = attendanceData[pk];
+  if (!p.edits) p.edits = {};
+  const list = getCellEdits(p, dt);
+  const entry = { who: editorName(), ts: Date.now(), from: from || '', to: to || '' };
+  if (noteFrom !== noteTo) { entry.noteChanged = true; entry.noteTo = noteTo || ''; }
+  list.unshift(entry);
+  p.edits[dt] = list.slice(0, EDIT_HISTORY_LIMIT);
+}
+function renderEditMeta(p, dt) {
+  const el = document.getElementById('editMeta');
+  const list = getCellEdits(p, dt);
+  if (!list.length) { el.style.display = 'none'; el.innerHTML = ''; return; }
+  const last = list[0];
+  let html = `<div class="em-row">Last edited by <b>${escHtml(last.who)}</b> &#183; ${fmtEditTs(last.ts)}</div><div>${describeEdit(last)}</div>`;
+  if (list.length > 1) {
+    html += '<div class="em-hist">' + list.slice(1).map(e => `<div><b>${escHtml(e.who)}</b> &#183; ${fmtEditTs(e.ts)} &#183; ${describeEdit(e)}</div>`).join('') + '</div>';
+  }
+  el.innerHTML = html; el.style.display = 'block';
+}
+function collectChangeLog() {
+  const rows = [];
+  for (const [pk, p] of Object.entries(attendanceData)) {
+    if (!p || !p.edits) continue;
+    for (const dt of Object.keys(p.edits)) {
+      for (const e of getCellEdits(p, dt)) rows.push({ ...e, pk, dt, name: p.displayName || pk });
+    }
+  }
+  return rows.sort((a,b)=>b.ts-a.ts);
+}
+function renderChangeLog() {
+  const q = (document.getElementById('changeLogFilter').value || '').trim().toLowerCase();
+  const rows = collectChangeLog().filter(r => !q || r.name.toLowerCase().includes(q) || (r.who||'').toLowerCase().includes(q));
+  const el = document.getElementById('changeLogEntries');
+  if (!rows.length) { el.innerHTML = '<div class="import-log-empty">No tracked edits yet. Edits are recorded from now on.</div>'; return; }
+  el.innerHTML = rows.map(r => `<div class="import-log-entry" style="cursor:pointer" onclick="closeChangeLog();openEdit('${r.pk.replace(/\\/g,'\\\\').replace(/'/g,"\\'")}','${r.dt}')">
+      <span class="log-who">${escHtml(r.who)}</span><span class="log-sep">&#183;</span>
+      <span style="color:var(--text)">${escHtml(r.name)}</span><span class="log-sep">&#183;</span>
+      <span>${fmtDate(r.dt)}</span><span class="log-sep">&#183;</span>
+      <span style="color:var(--text-dim)">${describeEdit(r)}</span>
+      <span style="margin-left:auto">${fmtEditTs(r.ts)}</span>
+    </div>`).join('');
+}
+function openChangeLog() { document.getElementById('changeLogFilter').value=''; renderChangeLog(); document.getElementById('changeLogModal').classList.add('active'); }
+function closeChangeLog() { document.getElementById('changeLogModal').classList.remove('active'); }
+// ─────────────────────────────────────────────────────────────────────────────
+function openEdit(pk,dt) {
+  editingPerson=pk; editingDate=dt;
+  const p=attendanceData[pk], name=p?(p.displayName||pk):pk;
+  document.getElementById('editTitle').textContent='Edit Entry';
+  document.getElementById('editSubtitle').textContent=name+' \u2014 '+fmtDateLong(dt);
+  const input=document.getElementById('editInput');
+  input.value=(p&&p.dates&&p.dates[dt])?p.dates[dt]:'';
+  const noteEl=document.getElementById('editNote'), note=(p&&p.notes&&p.notes[dt])?p.notes[dt]:'';
+  if (note) { noteEl.textContent=note; noteEl.style.display='block'; } else { noteEl.style.display='none'; }
+  document.getElementById('userNoteInput').value=(p&&p.userNotes&&p.userNotes[dt])?p.userNotes[dt]:'';
+  document.getElementById('hidePersonBtn').textContent=(p&&p.hidden)?'Unhide Budtender':'Hide Budtender';
+  renderEditMeta(p, dt);
+  document.getElementById('editModal').classList.add('active');
+  setTimeout(()=>input.focus(),100);
+}
+function fillEdit(val) { document.getElementById('editInput').value=val; }
+function clearUserNote() { document.getElementById('userNoteInput').value=''; document.getElementById('userNoteInput').focus(); }
+function saveEdit() {
+  if (!editingPerson||!editingDate) return;
+  const val=document.getElementById('editInput').value.trim();
+  const userNote=document.getElementById('userNoteInput').value.trim();
+  const caBefore=caPendingKeys();
+  if (!attendanceData[editingPerson]) attendanceData[editingPerson]={displayName:editingPerson,dates:{}};
+  if (!attendanceData[editingPerson].dates) attendanceData[editingPerson].dates={};
+  if (!attendanceData[editingPerson].userNotes) attendanceData[editingPerson].userNotes={};
+  const prevVal=(attendanceData[editingPerson].dates[editingDate]||'').toString().trim();
+  const prevNote=(attendanceData[editingPerson].userNotes[editingDate]||'').toString().trim();
+  recordEdit(editingPerson, editingDate, prevVal, val, prevNote, userNote);
+  if (val) attendanceData[editingPerson].dates[editingDate]=val; else delete attendanceData[editingPerson].dates[editingDate];
+  if (userNote) attendanceData[editingPerson].userNotes[editingDate]=userNote; else delete attendanceData[editingPerson].userNotes[editingDate];
+  saveData(); rebuildDates(); renderTable(); closeEdit();
+  caAutoPrompt(caBefore);
+}
+function closeEdit() { document.getElementById('editModal').classList.remove('active'); editingPerson=editingDate=null; }
+function deletePerson() {
+  if (!editingPerson) return;
+  const p=attendanceData[editingPerson], name=p?(p.displayName||editingPerson):editingPerson;
+  if (!confirm('Delete '+name+' and all their attendance data?')) return;
+  delete attendanceData[editingPerson];
+  saveData(); rebuildDates(); renderTable(); closeEdit();
+  toast(name+' deleted','success');
+}
+function exportCSV() {
+  if (!Object.keys(attendanceData).length) { toast('No data','error'); return; }
+  rebuildDates();
+  let csv='PS&STO Hrs Left,First Name,Last Name,Annual Pts,Last 60 Days,Write-Up Pts,'+allDates.map(d=>fmtDate(d)).join(',')+'\n';
+  Object.entries(attendanceData).sort((a,b)=>(a[1].displayName||a[0]).localeCompare(b[1].displayName||b[0])).forEach(([k,p])=>{
+    const name=p.displayName||k; let fn='',ln='';
+    if (name.includes(',')) { const pts=name.split(',').map(s=>s.trim()); ln=pts[0]; fn=pts[1]||''; }
+    else { const pts=name.split(' ').filter(Boolean); fn=pts[0]||''; ln=pts.slice(1).join(' '); }
+    const dates=p.dates||{}, ap=getAnnualPts(dates), l60=getLast60Pts(dates), wp=getWriteupPts(dates), stoRem=getStoRemaining(dates);
+    csv+=`${fmtStoHrs(stoRem)},"${fn}","${ln}",${ap},${l60},${wp},${allDates.map(d=>dates[d]||'').join(',')}\n`;
+  });
+  const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));
+  a.download=`attendance_usq_${new Date().toISOString().split('T')[0]}.csv`; a.click();
+  toast('CSV exported','success');
+}
+function confirmClear() {
+  if (!confirm('Clear ALL attendance data? (You can Undo right after, but only in this browser session.)')) return;
+  if (!confirm('Are you sure?')) return;
+  attendanceData={}; saveData(); rebuildDates(); renderTable(); toast('All data cleared','success');
+}
+// Managers don't clock in/out, so they're kept out of corrective actions and alert emails.
+const MANAGERS = [['mark','muniz'], ['jeff','mchale']];
+function isManager(name) {
+  const s = (name || '').toString().toLowerCase();
+  let fn, ln;
+  if (s.includes(',')) { const p = s.split(','); ln = p[0]; fn = p[1] || ''; }
+  else { const p = s.trim().split(/\s+/); fn = p[0] || ''; ln = p[p.length - 1] || ''; }
+  fn = fn.trim().split(/\s+/)[0] || ''; ln = ln.trim().split(/\s+/).pop() || '';
+  const clean = x => x.replace(/[^a-z]/g, '');
+  return MANAGERS.some(([f, l]) => clean(fn) === f && clean(ln) === l);
+}
+function toLocalYMD(d) { return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
+// ── Corrective Action (auto-generated at 3 points) ───────────────────────────
+// Anyone whose current points (same number that turns the name red: points since
+// their last write-up, or last-60-days if never written up) reach 3 gets a
+// corrective-action form pre-filled from the occurrence history. "Record in
+// tracker" drops the 1st/2nd/Final/Terminated marker on the form date, which
+// resets their write-up points and clears them from the banner.
+const CA_FOLDER_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>';
+const CA_CONFIG = { company: 'The Travel Agency: USQ', supervisor: 'Jennifer Bartholomeo', location: 'USQ', title: 'Budtender', emailTo: 'Melissa' };
+// First names of supervisors; anyone else defaults to CA_CONFIG.title
+const CA_SUPERVISORS = [];   // add USQ supervisors' first names (lowercase) here
+function caTitleFor(fn) { return CA_SUPERVISORS.includes((fn || '').trim().split(/\s+/)[0].toLowerCase()) ? 'Supervisor' : CA_CONFIG.title; }
+const CA_THRESHOLD = 3;
+const CA_STAGES = {
+  first:       { label: 'First Warning',  marker: '1st' },
+  second:      { label: 'Second Warning', marker: '2nd' },
+  final:       { label: 'Final Warning',  marker: 'Final' },
+  termination: { label: 'Termination',    marker: 'Terminated' }
+};
+let employees = {};       // { "first_last": { first, last, id } } — lives in Firebase, never in the repo
+let pendingEmployees = null;
+let caPerson = null;      // attendanceData key of the person in the modal
+let caOccurrences = [];
+let caPriorCycles = [];
+
+function escHtml(s) { return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function splitName(name) {
+  let fn = '', ln = '';
+  if (name.includes(',')) { const parts = name.split(',').map(s => s.trim()); ln = parts[0]; fn = parts[1] || ''; }
+  else { const parts = name.split(' ').map(s => s.trim()).filter(Boolean); if (parts.length >= 2) { fn = parts[0]; ln = parts.slice(1).join(' '); } else { fn = parts[0] || name; } }
+  return { fn, ln };
+}
+function empKey(fn, ln) { return (fn + '_' + ln).toLowerCase().replace(/[^a-z0-9_]/g, ''); }
+
+// ── Employee ID list ──
+function loadEmployees() {
+  try { employees = JSON.parse(localStorage.getItem('bt_employees_usq_gm') || '{}') || {}; } catch(e) { employees = {}; }
+  employeesRef.on('value', snap => {
+    employees = snap.val() || {};
+    try { localStorage.setItem('bt_employees_usq_gm', JSON.stringify(employees)); } catch(e) {}
+  }, err => console.warn('Employees load failed, using cached list:', err.message));
+}
+// Older versions imported the ID file as attendance, leaving each ID in the person's row
+// under an "Employee ID" pseudo-date. Read the ID from there when the employee list has none.
+function caRowId(p) {
+  const keys = Object.keys((p && p.dates) || {});
+  // the column is named like an ID, or (whatever it is called) is not a date and holds a plain number
+  const k = keys.find(k => /^(employee.?)?(id|number|no)$/i.test(k.trim()))
+         || keys.find(k => !/^\d{4}-\d{2}-\d{2}/.test(k) && /^\d{3,8}$/.test(String(p.dates[k]).trim()));
+  return k ? String(p.dates[k] == null ? '' : p.dates[k]).trim() : '';
+}
+function findRowEmployeeId(fn, ln) {
+  const want = empKey(fn, ln);
+  for (const p of Object.values(attendanceData)) {
+    const nm = splitName(p.displayName || '');
+    if (empKey(nm.fn, nm.ln) !== want) continue;
+    const id = caRowId(p);
+    if (id) return id;
+  }
+  return '';
+}
+function findEmployeeId(fn, ln) {
+  const exact = employees[empKey(fn, ln)];
+  if (exact) return exact.id || '';
+  // nicknames / short forms (Will vs William): same last name, one first name starts with the other
+  const f = fn.toLowerCase(), l = ln.toLowerCase();
+  const hits = Object.values(employees).filter(e => (e.last || '').toLowerCase() === l && f && (e.first || '').toLowerCase() && ((e.first.toLowerCase().startsWith(f)) || f.startsWith(e.first.toLowerCase())));
+  return hits.length === 1 ? (hits[0].id || '') : '';
+}
+
+// ── Who needs a corrective action, and which one ──
+function caNextStage(dates) {
+  const wu = getLatestWriteup(dates);
+  if (wu === '1st') return 'second';
+  if (wu === '2nd') return 'final';
+  if (wu === 'final') return 'termination';
+  return 'first';   // never written up, or last cycle was marked Completed
+}
+function caCurrentPts(dates) { return getLatestWriteup(dates) !== null ? getWriteupPts(dates) : getLast60Pts(dates); }
+function caNeeds(person) {
+  if (!person || person.hidden || isManager(person.displayName)) return false;
+  const dates = person.dates || {};
+  if (isTerminated(dates)) return false;
+  return caCurrentPts(dates) >= CA_THRESHOLD;
+}
+function caPendingKeys() { return Object.keys(attendanceData).filter(k => !isManager(k) && caNeeds(attendanceData[k])); }
+// The occurrences that make up the person's current points, oldest first.
+function caGetOccurrences(person) {
+  const dates = person.dates || {}, notes = person.notes || {};
+  const hasWU = getLatestWriteup(dates) !== null;
+  let lastWU = null;
+  if (hasWU) Object.entries(dates).sort((a,b)=>a[0].localeCompare(b[0])).forEach(([d,v]) => { if (['1st','2nd','final','terminated','term','completed'].includes((v||'').toString().trim().toLowerCase())) lastWU = d; });
+  const today = new Date(); today.setHours(0,0,0,0);
+  const cutoff = new Date(today); cutoff.setDate(cutoff.getDate() - 60);
+  const out = [];
+  Object.entries(dates).sort((a,b)=>a[0].localeCompare(b[0])).forEach(([d,v]) => {
+    const pts = getPoints(v); if (!pts) return;
+    if (hasWU) { if (d <= lastWU) return; }
+    else { const ed = parseDate(d); if (!ed) return; ed.setHours(0,0,0,0); if (ed < cutoff || ed > today) return; }
+    out.push({ date: d, pts, label: caOccurrenceLabel(pts, notes[d] || '') });
+  });
+  return out;
+}
+// Earlier warnings in the person's current discipline chain, oldest first, each with the
+// occurrences that led to it: [{ marker:'1st', date:'2026-07-22', occurrences:[...] }].
+// A Completed/Terminated entry restarts the chain.
+function caGetPriorCycles(person) {
+  const dates = person.dates || {}, notes = person.notes || {};
+  const stages = { '1st': '1st', '2nd': '2nd', 'final': 'Final' };
+  let chain = [], bucket = [];
+  Object.entries(dates).sort((a,b)=>a[0].localeCompare(b[0])).forEach(([d,v]) => {
+    const val = (v||'').toString().trim().toLowerCase();
+    // write-ups delivered before the tracker had the data: occurrences saved under person.priorWriteups[date]
+    if (stages[val]) { const saved = (person.priorWriteups || {})[d]; chain.push({ marker: stages[val], date: d, occurrences: (!bucket.length && saved && saved.occurrences) ? saved.occurrences : bucket }); bucket = []; }
+    else if (['completed','terminated','term'].includes(val)) { chain = []; bucket = []; }
+    else { const pts = getPoints(v); if (pts) bucket.push({ date: d, pts, label: caOccurrenceLabel(pts, notes[d] || '') }); }
+  });
+  return chain;
+}
+function caOccurrenceLabel(pts, note) {
+  if (pts >= 1) return /no.?call|ncns/i.test(note) ? 'No Call/No Show' : 'Call Out';
+  let mins = null;
+  const shift = (note.match(/Shift:\s*([^|]+)/i) || [])[1], clock = (note.match(/Clocked:\s*([^|]+)/i) || [])[1];
+  if (shift && clock) mins = calcLateMinutes(shift.trim(), clock.trim());
+  if (mins === null) { const paren = (note.match(/\(([^)]*)\)/) || [])[1]; if (paren) mins = parseMins(paren); }
+  if (mins === null || mins <= 0) return 'Late';
+  mins = Math.round(mins);
+  return mins + (mins === 1 ? ' minute late' : ' minutes late');
+}
+function fmtPts(n) { return n % 1 === 0 ? String(n) : n.toFixed(1); }
+function fmtUS(ds) { const [y,m,d] = ds.split('-'); return parseInt(m) + '/' + parseInt(d) + '/' + y; }
+function todayYMD() { return toLocalYMD(new Date()); }
+
+// ── Cleanup for the employee-ID file being imported as attendance (old versions) ──
+// That import added an "Employee ID" pseudo-date to people and created extra
+// "Last, First" rows holding nothing else. Removes only those leftovers: rows that
+// have no dates/notes of their own AND whose person also has another row.
+const JUNK_DATE_KEY = 'Employee ID';
+function caRowIsEmpty(p) {
+  const real = Object.keys(p.dates || {}).filter(k => k !== JUNK_DATE_KEY);
+  return !real.length && !(p.userNotes && Object.keys(p.userNotes).length);
+}
+function caJunkPlan() {
+  const groups = {};
+  Object.keys(attendanceData).forEach(k => {
+    const nm = splitName(attendanceData[k].displayName || k);
+    (groups[empKey(nm.fn, nm.ln)] = groups[empKey(nm.fn, nm.ln)] || []).push(k);
+  });
+  const remove = [];
+  Object.values(groups).forEach(keys => {
+    if (keys.length < 2) return;
+    const withData = keys.filter(k => !caRowIsEmpty(attendanceData[k]));
+    const empties = keys.filter(k => caRowIsEmpty(attendanceData[k]));
+    if (withData.length) remove.push(...empties);        // keep every row that has data
+    else remove.push(...empties.slice(1));                // all empty: keep just one
+  });
+  // rows created purely by the ID import (their only entry is the "Employee ID" pseudo-date)
+  Object.keys(attendanceData).forEach(k => { const p = attendanceData[k], ks = Object.keys(p.dates || {}); if (ks.length === 1 && ks[0] === JUNK_DATE_KEY && caRowIsEmpty(p) && !remove.includes(k)) remove.push(k); });
+  // never remove every row of a person who has more than one: keep the best one
+  Object.values(groups).forEach(keys => {
+    if (keys.length < 2 || !keys.every(k => remove.includes(k))) return;
+    const keep = keys.find(k => !(attendanceData[k].dates && JUNK_DATE_KEY in attendanceData[k].dates)) || keys[0];
+    remove.splice(remove.indexOf(keep), 1);
+  });
+  const strip = Object.keys(attendanceData).filter(k => attendanceData[k].dates && JUNK_DATE_KEY in attendanceData[k].dates && !remove.includes(k));
+  return { remove, strip };
+}
+function cleanupIdImport() {
+  const plan = caJunkPlan();
+  const names = plan.remove.map(k => attendanceData[k].displayName || k);
+  if (!confirm('Remove duplicate leftover rows?\n\nRows to delete (' + names.length + '):\n' + (names.join(', ') || 'none') + '\n\nThese have no dates or notes, and the same person has another row. The stray "Employee ID" column will also be removed from ' + plan.strip.length + ' other row(s). No real dates or points are changed.')) return;
+  // keep the IDs: copy them into the employee list before the stray column is removed
+  let saved = 0;
+  Object.values(attendanceData).forEach(p => {
+    const id = caRowId(p); if (!id) return;
+    const nm = splitName(p.displayName || ''), key = empKey(nm.fn, nm.ln);
+    if (nm.fn && nm.ln && !(employees[key] && employees[key].id)) { employees[key] = { first: nm.fn, last: nm.ln, id }; saved++; }
+  });
+  if (saved) {
+    try { localStorage.setItem('bt_employees_usq_gm', JSON.stringify(employees)); } catch(e) {}
+    employeesRef.set(employees).catch(err => toast('Employee list save failed: ' + err.message, 'error'));
+  }
+  Object.values(attendanceData).forEach(p => { if (p.dates) delete p.dates[JUNK_DATE_KEY]; });
+  plan.remove.forEach(k => delete attendanceData[k]);
+  saveData(); rebuildDates(); renderTable();
+  toast('Removed ' + names.length + ' duplicate rows', 'success');
+}
+
+// ── Email alert at 3 points (EmailJS) ──
+// One email per person per discipline cycle. The "sent" marker lives in Firebase
+// (caAlertsSent/<key> = stage|last write-up date) and is claimed with a transaction,
+// so only one open copy of the tracker sends it. The marker is cleared once the
+// person drops off the corrective-action list (write-up recorded, points aged out),
+// so the next time they reach 3 they trigger a new email.
+const CA_EMAIL = { serviceId: 'service_tgk1onn', templateId: 'template_bh108b2', publicKey: 'N7F3dgrAKHdLinMWF' };
+let caAlertsSent = {};
+let caAlertsLoaded = false;
+let caDataLoaded = false;
+const caSendFailed = new Set();   // don't retry in a loop this session if EmailJS keeps failing
+if (window.emailjs) emailjs.init({ publicKey: CA_EMAIL.publicKey });
+
+function loadCAAlerts() {
+  caAlertsRef.on('value', snap => {
+    caAlertsSent = snap.val() || {};
+    caAlertsLoaded = true;
+    caSyncAlerts();
+  }, err => console.warn('Alert markers load failed, email alerts paused:', err.message));
+}
+function caLastWriteupDate(dates) {
+  let last = 'none';
+  Object.entries(dates || {}).sort((a,b)=>a[0].localeCompare(b[0])).forEach(([d,v]) => {
+    if (['1st','2nd','final','terminated','term','completed'].includes((v||'').toString().trim().toLowerCase())) last = d;
+  });
+  return last;
+}
+function caAlertSig(p) { const dates = p.dates || {}; return caNextStage(dates) + '|' + caLastWriteupDate(dates); }
+// Builds the same form + template email the pop-up shows, using its defaults
+// (next stage, today's date, ID from the employee list, CA_CONFIG.emailTo).
+// Both go in the email body (EmailJS attachments need a paid plan).
+function caAlertContent(k) {
+  try {
+    const p = attendanceData[k], dates = p.dates || {}, nm = splitName(p.displayName || k);
+    const stage = caNextStage(dates);
+    const d = {
+      first: nm.fn, last: nm.ln, stage, date: todayYMD(),
+      empId: findEmployeeId(nm.fn, nm.ln) || caRowId(p) || findRowEmployeeId(nm.fn, nm.ln) || '',
+      title: caTitleFor(nm.fn), supervisor: CA_CONFIG.supervisor, location: CA_CONFIG.location,
+      sickRemaining: getStoRemaining(dates),
+      occurrences: caGetOccurrences(p),
+      prior: stage === 'first' ? [] : caGetPriorCycles(p)
+    };
+    const email = caEmailHtml(d, CA_CONFIG.emailTo);
+    return {
+      email: (email.match(/<body[^>]*>([\s\S]*)<\/body>/i) || [, email])[1],
+      form: caFormHtml(d)
+    };
+  } catch (e) { console.warn('Could not build corrective action content:', e); return { email: '', form: '' }; }
+}
+function caSyncAlerts() {
+  if (!caAlertsLoaded || !caDataLoaded || !window.emailjs) return;
+  const pending = caPendingKeys();
+  // clear markers for people no longer on the list
+  Object.keys(caAlertsSent).forEach(k => { if (!pending.includes(k)) caAlertsRef.child(k).remove().catch(()=>{}); });
+  pending.forEach(k => {
+    const sig = caAlertSig(attendanceData[k]);
+    if (caAlertsSent[k] === sig || caSendFailed.has(k + '|' + sig)) return;
+    caAlertsRef.child(k).transaction(cur => cur === sig ? undefined : sig).then(res => {
+      if (!res.committed) return;   // someone else already sent it
+      const p = attendanceData[k]; if (!p) return;
+      const nm = splitName(p.displayName || k);
+      const ca = caAlertContent(k);
+      return emailjs.send(CA_EMAIL.serviceId, CA_EMAIL.templateId, {
+        employee_name: (nm.fn + ' ' + nm.ln).trim(),
+        points: fmtPts(caCurrentPts(p.dates || {})),
+        next_stage: CA_STAGES[caNextStage(p.dates || {})].label,
+        store: 'USQ GM',
+        ca_email: ca.email,
+        ca_form_html: ca.form
+      }).then(() => toast('Alert emailed: ' + nm.fn + ' ' + nm.ln + ' reached ' + CA_THRESHOLD + ' points', 'success'))
+        .catch(err => {
+          console.warn('EmailJS send failed:', err);
+          caSendFailed.add(k + '|' + sig);
+          toast('Alert email failed for ' + nm.fn + ' ' + nm.ln, 'error');
+          caAlertsRef.child(k).remove().catch(()=>{});   // allow a retry next load
+        });
+    }).catch(err => console.warn('Alert marker save failed:', err.message));
+  });
+}
+
+// ── Banner + auto prompt ──
+function updateCABanner() {
+  const el = document.getElementById('caBanner'); if (!el) return;
+  caSyncAlerts();
+  const jp = caJunkPlan();
+  if (!jp.remove.length && !jp.strip.length) { el.classList.remove('active'); el.innerHTML = ''; return; }
+  el.classList.add('active');
+  const what = jp.remove.length ? `Duplicate leftover rows found (${jp.remove.length}).` : 'Leftover employee ID import data found.';
+  el.innerHTML = `<strong>&#9888; ${what}</strong><button class="ca-chip" onclick="cleanupIdImport()">Review &amp; remove</button>`;
+}
+function caAutoPrompt(before) {
+  const fresh = caPendingKeys().filter(k => !before.includes(k));
+  if (!fresh.length) return;
+  openCA(fresh[0]);
+  if (fresh.length > 1) toast((fresh.length - 1) + ' more budtender(s) also need a corrective action (look for the folder icon)', 'error');
+}
+
+// ── Form ──
+function caFormData() {
+  const p = attendanceData[caPerson]; const nm = splitName(p.displayName || caPerson);
+  return {
+    first: nm.fn, last: nm.ln,
+    stage: document.getElementById('caStage').value,
+    date: document.getElementById('caDate').value,
+    empId: document.getElementById('caEmpId').value.trim(),
+    title: document.getElementById('caTitle').value.trim(),
+    supervisor: document.getElementById('caSupervisor').value.trim(),
+    location: document.getElementById('caLocation').value.trim(),
+    sickRemaining: getStoRemaining(attendanceData[caPerson].dates || {}),
+    occurrences: caOccurrences,
+    prior: document.getElementById('caStage').value === 'first' ? [] : caPriorCycles
+  };
+}
+function caExpectation(stage) {
+  const base = 'Consistent and punctual attendance is required. Immediate improvement is expected. ';
+  if (stage === 'second') return 'Immediate and sustained improvement in attendance and punctuality is required. Any additional unexcused occurrences may result in further disciplinary action, up to and including termination.';
+  if (stage === 'final') return base + 'This is a final warning. Any further attendance issues will result in termination, in accordance with the Attendance & Punctuality and Progressive Discipline policies.';
+  if (stage === 'termination') return 'Due to continued attendance issues after prior corrective action, employment is terminated in accordance with the Attendance & Punctuality and Progressive Discipline policies.';
+  return base + 'Continued attendance issues may result in additional corrective action, up to and including termination, in accordance with the Attendance & Punctuality and Progressive Discipline policies.';
+}
+function caFormHtml(d) {
+  // One flat 20-column table (no nested tables) so Word / LibreOffice keep the column widths.
+  const box = on => on ? '&#9746;' : '&#9744;';
+  const total = d.occurrences.reduce((a, o) => a + o.pts, 0);
+  const hasLate = d.occurrences.some(o => o.pts < 1);
+  const B = 'border:1px solid #000;padding:4px 7px;vertical-align:top;font-family:Arial,Helvetica,sans-serif;font-size:10pt;';
+  const td = (span, html, extra) => `<td colspan="${span}" width="${span * 36}" style="${B}${extra || ''}">${html}</td>`;
+  const lbl = t => `<div style="font-size:8pt;font-weight:bold;text-transform:uppercase">${t}</div>`;
+  const hd = t => `<tr>${td(20, t, 'background:#d9d9d9;font-size:8pt;font-weight:bold;text-transform:uppercase')}</tr>`;
+  const chk = (on, t) => `<div style="margin:1px 0">${box(on)} ${t}</div>`;
+  const stageRow = Object.entries(CA_STAGES).map(([k, s]) => td(5, `${box(d.stage === k)} ${s.label}`)).join('');
+  const ul = occ => `<ul style="margin:2px 0 2px 18px;padding:0">${occ.map(o => `<li>${fmtUS(o.date)} &ndash; ${escHtml(o.label)} &ndash; ${fmtPts(o.pts)}</li>`).join('')}</ul>`;
+  const list = ul(d.occurrences);
+  const sumPts = occ => occ.reduce((a, o) => a + o.pts, 0);
+  // Later warnings put each earlier warning's occurrences in its own column, current ones in the last.
+  const cols = d.prior.length ? [
+    ...d.prior.map(c => ({ head: `${c.marker} Delivered on ${fmtUS(c.date)}`, occ: c.occurrences })),
+    { head: 'For ' + CA_STAGES[d.stage].marker + ':', occ: d.occurrences }
+  ] : null;
+  let details;
+  if (cols) {
+    const base = Math.floor(20 / cols.length), extra = 20 - base * cols.length;
+    const cells = cols.map((c, i) => {
+      const bd = 'border:none;border-bottom:1px solid #000;' + (i === 0 ? 'border-left:1px solid #000;' : '') + (i === cols.length - 1 ? 'border-right:1px solid #000;' : '');
+      return td(base + (i === 0 ? extra : 0), `<p style="margin:0"><b>${escHtml(c.head)}</b></p>${ul(c.occ)}<p style="margin:0"><b>Total Occurrences: ${fmtPts(sumPts(c.occ))}</b></p>`, bd);
+    }).join('');
+    details = `<tr>${td(20, `<p style="margin:0">${escHtml(d.first)} has failed to meet the Company&rsquo;s attendance, punctuality, and/or timekeeping expectations as outlined in policy. ${escHtml(d.first)} currently has ${fmtPts(total)} occurrences.</p><p style="margin:6px 0 0"><b>Documented Occurrence(s):</b></p>`, 'border-bottom:none;')}</tr>\n<tr>${cells}</tr>`;
+  } else {
+    details = `<tr>${td(20, `<p style="margin:0 0 6px">${escHtml(d.first)} has failed to meet the Company&rsquo;s attendance, punctuality, and/or timekeeping expectations as outlined in policy. ${escHtml(d.first)} currently has ${fmtPts(total)} occurrences.</p><p style="margin:0"><b>Documented Occurrence(s):</b></p>${list}<p style="margin:0"><b>Total Occurrence: ${fmtPts(total)}</b></p>`)}</tr>`;
+  }
+  const noBorder = 'border:none;padding:2px 0;font-family:Arial,Helvetica,sans-serif;';
+  return `<table align="center" width="720" style="width:720px;margin:0 auto;border-collapse:collapse;table-layout:fixed;font-family:Arial,Helvetica,sans-serif;font-size:10pt;color:#000">
+<colgroup>${'<col width="36" style="width:36px">'.repeat(20)}</colgroup>
+<tr><td colspan="20" width="720" style="${noBorder}text-align:center;font-size:9pt">${escHtml(CA_CONFIG.company)} Corrective Action Form</td></tr>
+<tr><td colspan="20" width="720" style="${noBorder}text-align:center;font-size:16pt;font-weight:bold;padding-bottom:6px">CORRECTIVE ACTION FORM</td></tr>
+<tr>${td(10, lbl('Employee Name') + escHtml(d.first + ' ' + d.last))}${td(10, lbl('Date') + (d.date ? fmtUS(d.date) : ''))}</tr>
+<tr>${td(10, lbl('Employee ID Number') + escHtml(d.empId) + '&nbsp;')}${td(10, lbl('Employee&rsquo;s Job Title') + escHtml(d.title))}</tr>
+<tr>${td(10, lbl('Direct Supervisor&rsquo;s Name') + escHtml(d.supervisor))}${td(10, lbl('Employee&rsquo;s Work Location') + escHtml(d.location))}</tr>
+${hd('Corrective Action To Be Taken (check one)')}
+<tr>${stageRow}</tr>
+${hd('Nature of Incident (check one)')}
+<tr>${td(10, '<div style="font-weight:bold">Unsatisfactory Performance</div>' + chk(false,'Not Meeting Job Role Expectations') + chk(true,'Attendance') + chk(hasLate,'Chronic Tardiness'))}${td(10, '<div style="font-weight:bold">Unsatisfactory Conduct</div>' + chk(false,'Negligent Conduct') + chk(false,'Inappropriate Conduct') + chk(false,'Insubordination') + chk(d.occurrences.some(o => /no call/i.test(o.label)),'No Call/No Show') + chk(true,'Violation of Policy'))}</tr>
+${hd('Incident Details')}
+${details}
+${hd('Future Expectation')}
+<tr>${td(20, escHtml(caExpectation(d.stage)))}</tr>
+<tr>${td(7, lbl('Supervisor&rsquo;s Signature'), 'height:40px')}${td(3, lbl('Date'))}${td(7, lbl('HR Signature'))}${td(3, lbl('Date'))}</tr>
+<tr><td colspan="20" width="720" style="${noBorder}padding-top:8px;font-size:9pt">Your signature below indicates this warning has been reviewed with you, and has received a copy; It does not constitute agreement with this document.</td></tr>
+<tr>${td(14, lbl('Employee Signature'), 'height:40px')}${td(6, lbl('Date'))}</tr>
+<tr><td colspan="20" width="720" style="${noBorder}padding-top:8px;text-align:center;font-size:9pt;font-weight:bold">CONFIDENTIAL</td></tr>
+</table>`;
+}
+// ── Email to HR asking to move forward with the warning ──
+const CA_MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+function caEmailHtml(d, to) {
+  const ptsWord = n => fmtPts(n) + (n <= 1 ? ' point' : ' points');
+  const P = 'margin:0 0 12px;';
+  const group = occ => {
+    const months = [];
+    occ.forEach(o => { const key = o.date.slice(0, 7); let m = months[months.length - 1]; if (!m || m.key !== key) months.push(m = { key, occ: [] }); m.occ.push(o); });
+    return months.map(m => {
+      const [y, mo] = m.key.split('-');
+      const sum = m.occ.reduce((a, o) => a + o.pts, 0);
+      return `<p style="${P}">${CA_MONTHS[parseInt(mo) - 1]} ${y} | ${ptsWord(sum)}</p><ul style="margin:0 0 12px 0;padding-left:40px">${m.occ.map(o => `<li>${fmtUS(o.date)} | ${escHtml(o.label)} | ${ptsWord(o.pts)}</li>`).join('')}</ul>`;
+    }).join('');
+  };
+  const total = occ => `<p style="${P}">Total Points: ${fmtPts(occ.reduce((a, o) => a + o.pts, 0))}</p>`;
+  const lastPrior = d.prior[d.prior.length - 1];
+  const priorLabel = { '1st': 'First Warning', '2nd': 'Second Warning', 'Final': 'Final Warning' };
+  const ask = d.stage === 'termination' ? 'move forward with Termination' : 'move forward with a ' + CA_STAGES[d.stage].marker + ' Warning';
+  const who = escHtml((d.title || 'Employee') + ', ' + d.first + ' ' + d.last);
+  const sick = d.sickRemaining <= 0 ? ' They have used all their NY Safe and Sick Leave.' : ` They have ${fmtStoHrs(d.sickRemaining)} hours of NY Safe and Sick Leave remaining.`;
+  const intro = lastPrior
+    ? `${who}, has been on a ${priorLabel[lastPrior.marker]} since ${fmtUS(lastPrior.date)} and continued to show a pattern of lateness and absences.${sick} Can we ${ask}. See breakdown.`
+    : `${who}, has reached ${fmtPts(d.occurrences.reduce((a, o) => a + o.pts, 0))} points and has shown a pattern of lateness and absences.${sick} Can we ${ask}. See breakdown.`;
+  let body = '';
+  d.prior.forEach(c => { body += `<p style="${P}">${c.marker} Delivered on ${fmtUS(c.date)}</p>${group(c.occurrences)}${total(c.occurrences)}`; });
+  if (d.prior.length) body += `<p style="${P}">For ${d.stage === 'termination' ? 'Termination' : CA_STAGES[d.stage].marker}</p>`;
+  body += group(d.occurrences) + total(d.occurrences);
+  return `<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body style="margin:0;padding:12px;background:#fff;font-family:Arial,Helvetica,sans-serif;font-size:10pt;color:#222"><p style="${P}">Hey ${escHtml(to || '')},</p><p style="${P}">${intro}</p>${body}</body></html>`;
+}
+function caSetView(v) {
+  document.getElementById('caPreview').style.display = v === 'form' ? '' : 'none';
+  document.getElementById('caEmailPreview').style.display = v === 'email' ? '' : 'none';
+  document.getElementById('caTabForm').className = 'btn' + (v === 'form' ? ' primary' : '');
+  document.getElementById('caTabEmail').className = 'btn' + (v === 'email' ? ' primary' : '');
+}
+async function caCopyEmail() {
+  if (!caPerson) return;
+  const html = caEmailHtml(caFormData(), document.getElementById('caEmailTo').value.trim());
+  try {
+    const text = new DOMParser().parseFromString(html, 'text/html').body.innerText || '';
+    await navigator.clipboard.write([new ClipboardItem({ 'text/html': new Blob([html], { type: 'text/html' }), 'text/plain': new Blob([text], { type: 'text/plain' }) })]);
+    toast('Email copied — paste it into your email', 'success');
+  } catch (e) {
+    const f = document.getElementById('caEmailPreview'), doc = f.contentDocument;
+    try { const r = doc.createRange(); r.selectNodeContents(doc.body); const sel = f.contentWindow.getSelection(); sel.removeAllRanges(); sel.addRange(r); doc.execCommand('copy'); toast('Email copied — paste it into your email', 'success'); }
+    catch (e2) { toast('Could not copy — select the email and copy manually', 'error'); }
+  }
+}
+function caDocHtml(d) {
+  return `<!DOCTYPE html><html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word"><head><meta charset="UTF-8"><title>Corrective Action - ${escHtml(d.last + ', ' + d.first)}</title>
+<style>@page{size:8.5in 11in;margin:0.5in}body{margin:0;padding:14px;background:#fff;font-family:Arial,Helvetica,sans-serif;text-align:center}table{text-align:left}@media print{body{padding:0}}</style></head><body>${caFormHtml(d)}</body></html>`;
+}
+function caRefresh() {
+  if (!caPerson) return;
+  const fd = caFormData();
+  document.getElementById('caPreview').srcdoc = caDocHtml(fd);
+  document.getElementById('caEmailPreview').srcdoc = caEmailHtml(fd, document.getElementById('caEmailTo').value.trim());
+  document.getElementById('caRecordBtn').textContent = 'Record ' + CA_STAGES[document.getElementById('caStage').value].marker + ' in tracker';
+}
+function openCA(key) {
+  const p = attendanceData[key]; if (!p) return;
+  const dates = p.dates || {}, nm = splitName(p.displayName || key);
+  caPerson = key;
+  caOccurrences = caGetOccurrences(p);
+  caPriorCycles = caGetPriorCycles(p);
+  const total = caOccurrences.reduce((a, o) => a + o.pts, 0);
+  document.getElementById('caSubtitle').textContent = nm.fn + ' ' + nm.ln + ' — ' + fmtPts(total) + ' points';
+  document.getElementById('caStage').value = caNextStage(dates);
+  document.getElementById('caDate').value = todayYMD();
+  const id = findEmployeeId(nm.fn, nm.ln) || caRowId(p) || findRowEmployeeId(nm.fn, nm.ln);
+  document.getElementById('caEmpId').value = id;
+  document.getElementById('caEmpId').placeholder = Object.keys(employees).length ? 'Not found in employee list' : 'Import employee ID list first';
+  document.getElementById('caTitle').value = caTitleFor(nm.fn);
+  document.getElementById('caSupervisor').value = CA_CONFIG.supervisor;
+  document.getElementById('caLocation').value = CA_CONFIG.location;
+  document.getElementById('caEmailTo').value = CA_CONFIG.emailTo;
+  caSetView('form');
+  document.getElementById('caModal').classList.add('active');
+  caRefresh();
+}
+function closeCA() { document.getElementById('caModal').classList.remove('active'); caPerson = null; }
+function caFileBase() { const d = caFormData(); return `${d.last}, ${d.first[0] || ''}. ${CA_STAGES[d.stage].label} - Attendance`; }
+function caDownload() {
+  if (!caPerson) return;
+  const d = caFormData();
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob(['﻿', caDocHtml(d)], { type: 'application/msword' }));
+  a.download = caFileBase() + '.doc'; a.click();
+  toast('Downloaded', 'success');
+}
+function caPrint() {
+  const f = document.getElementById('caPreview');
+  if (f.contentWindow) { f.contentWindow.focus(); f.contentWindow.print(); }
+}
+function caRecord() {
+  if (!caPerson) return;
+  const d = caFormData(), p = attendanceData[caPerson], marker = CA_STAGES[d.stage].marker;
+  if (!d.date) { toast('Pick a date first', 'error'); return; }
+  const dates = p.dates || (p.dates = {});
+  if (Object.keys(dates).some(k => k > d.date && getPoints(dates[k]))) { toast('Form date must be on or after their last occurrence', 'error'); return; }
+  if (dates[d.date] && String(dates[d.date]).trim() !== marker) { toast('That date already has an entry (' + dates[d.date] + ') — pick an empty date', 'error'); return; }
+  dates[d.date] = marker;
+  const name = splitName(p.displayName || caPerson).fn;
+  saveData(); rebuildDates(); renderTable(); closeCA();
+  toast(marker + ' recorded for ' + name, 'success');
+}
+// ───────────────────────────────────────────────────────────────
+function toast(msg,type) {
+  const t=document.getElementById('toast');
+  t.textContent=msg; t.className='toast '+(type||'')+' show';
+  setTimeout(()=>t.classList.remove('show'),3000);
+}
+document.getElementById('editInput').addEventListener('keydown',e=>{ if (e.key==='Enter') saveEdit(); });
+</script>
+</body>
+</html>
