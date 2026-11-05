@@ -1102,10 +1102,10 @@ function getLatestWriteup(dates) {
   Object.entries(dates).sort((a,b)=>a[0].localeCompare(b[0])).forEach(([d,v]) => { const val=(v||'').toString().trim().toLowerCase(); if (writeupTypes.includes(val)) latest=val; });
   return latest;
 }
-function getNameColor(dates, terminated) {
+function getNameColor(dates, terminated, shownPts) {
   if (terminated) return 'name-terminated';
-  const hasWriteup=getLatestWriteup(dates)!==null;
-  const pts=hasWriteup?getWriteupPts(dates):getLast60Pts(dates);
+  // Color follows the points column on screen (Annual or Last 60 Days)
+  const pts=(typeof shownPts==='number')?shownPts:(getLatestWriteup(dates)!==null?getWriteupPts(dates):getLast60Pts(dates));
   if (pts>=3) return 'name-red';
   if (pts>=2) return 'name-orange';
   if (pts>=1) return 'name-yellow';
@@ -1222,7 +1222,7 @@ function renderTable() {
     const mainPts=ptsMode==='60days'?getLast60Pts(dates):getAnnualPts(dates);
     const wp=getWriteupPts(dates);
     if (!showHidden&&person.hidden) return '';
-    const termed=isTerminated(dates), nc=getNameColor(dates,termed), wuTag=getWriteupTagHtml(dates);
+    const termed=isTerminated(dates), nc=getNameColor(dates,termed,mainPts), wuTag=getWriteupTagHtml(dates);
     const caFolder=caPending.has(key)?`<button class="ca-folder" data-key="${escHtml(key)}" onclick="openCA(this.dataset.key)" title="Corrective action needed: ${CA_STAGES[caNextStage(dates)].label} (${fmtPts(caCurrentPts(dates))} pts). Click to open.">${CA_FOLDER_SVG}</button>`:'';
     const stoRem=getStoRemaining(dates);
     let cells;
