@@ -1711,6 +1711,7 @@ function caSyncAlerts() {
         points: fmtPts(caCurrentPts(p.dates || {})),
         next_stage: CA_STAGES[caNextStage(p.dates || {})].label,
         store: 'USQ GM',
+        cc_email: ALLOWED_EMAIL,
         ca_email: ca.email,
         ca_form_html: ca.form
       }).then(() => toast('Alert emailed: ' + nm.fn + ' ' + nm.ln + ' reached ' + CA_THRESHOLD + ' points', 'success'))
