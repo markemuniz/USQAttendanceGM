@@ -76,6 +76,29 @@
   .dropdown-item{padding:8px 12px;cursor:pointer;font-size:0.75rem;color:var(--text);transition:background 0.1s;white-space:nowrap}
   .dropdown-item:hover{background:var(--surface2)}
   .dropdown-item.selected{background:var(--accent-glow);color:var(--accent)}
+  .menu-wrap{position:relative}
+  .menu-btn{display:inline-flex;align-items:center;gap:7px;padding:6px 12px;border:1px solid var(--border);border-radius:6px;background:var(--surface2);color:var(--text);font-family:'DM Sans',sans-serif;font-size:0.75rem;font-weight:500;cursor:pointer;transition:all 0.15s;white-space:nowrap}
+  .menu-btn:hover,.menu-btn[aria-expanded="true"]{background:var(--surface3);border-color:var(--border-light)}
+  .menu-btn svg{width:15px;height:15px}
+  .view-status{font-size:0.72rem;color:var(--accent);background:var(--accent-glow);border:1px solid rgba(108,140,255,0.3);border-radius:999px;padding:3px 10px;cursor:pointer;white-space:nowrap}
+  .main-menu{display:none;position:absolute;top:calc(100% + 6px);right:0;width:240px;background:var(--surface);border:1px solid var(--border);border-radius:10px;box-shadow:0 12px 32px rgba(0,0,0,0.5);z-index:60;padding:6px;max-height:calc(100vh - 150px);overflow-y:auto}
+  .main-menu.active{display:block}
+  .mm-label{font-size:0.62rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.06em;padding:6px 8px 5px}
+  .mm-seg{display:grid;grid-template-columns:repeat(3,1fr);gap:3px;margin:0 4px 4px;padding:3px;background:var(--surface2);border:1px solid var(--border);border-radius:7px}
+  .mm-seg button{padding:5px 0;border:none;border-radius:5px;background:none;color:var(--text-dim);font-family:inherit;font-size:0.72rem;font-weight:500;cursor:pointer}
+  .mm-seg button:hover{color:var(--text)}
+  .mm-seg button.selected{background:var(--accent-glow);color:var(--accent)}
+  .mm-item{display:flex;align-items:center;gap:10px;width:100%;padding:8px 10px;border:none;border-radius:6px;background:none;color:var(--text);font-family:inherit;font-size:0.78rem;font-weight:500;text-align:left;cursor:pointer;white-space:nowrap}
+  .mm-item:hover:not(:disabled){background:var(--surface2)}
+  .mm-item:disabled{opacity:0.4;cursor:not-allowed}
+  .mm-item .ic{width:16px;text-align:center;color:var(--text-dim);flex-shrink:0}
+  .mm-item .mm-right{margin-left:auto;font-size:0.68rem;color:var(--text-muted)}
+  .mm-item.on,.mm-item.on .ic{color:var(--accent)}
+  .mm-item.danger,.mm-item.danger .ic{color:var(--red)}
+  .mm-item.danger:hover:not(:disabled){background:rgba(255,107,122,0.08)}
+  .mm-sep{height:1px;background:var(--border);margin:5px 4px}
+  .mm-months{display:none;max-height:200px;overflow-y:auto;margin:2px 4px 4px;border:1px solid var(--border);border-radius:7px;background:var(--bg)}
+  .mm-months.open{display:block}
   .header-dropdown{display:inline-flex;align-items:center;gap:4px;cursor:pointer;user-select:none}
   .header-dropdown::after{content:'▾';font-size:0.6rem;opacity:0.7}
   .header-dropdown:hover{color:var(--text-dim)}
@@ -264,28 +287,34 @@
   <div class="toolbar">
     <input class="search-box" id="searchBox" type="text" placeholder="Search budtenders..." oninput="renderTable()">
     <div class="toolbar-right">
-      <div class="dropdown">
-        <button class="dropdown-btn" id="viewModeBtn" onclick="toggleViewDropdown(event)">Normal View</button>
-        <div class="dropdown-menu" id="viewModeMenu">
-          <div class="dropdown-item selected" data-mode="normal" onclick="setViewMode('normal')">Normal View</div>
-          <div class="dropdown-item" data-mode="week" onclick="setViewMode('week')">Week View</div>
-          <div class="dropdown-item" data-mode="month" onclick="setViewMode('month')">Month View</div>
+      <span class="view-status" id="viewStatus" style="display:none" onclick="toggleMainMenu(event)" title="Open menu to change"></span>
+      <div class="menu-wrap" id="menuWrap">
+        <button class="menu-btn" id="menuBtn" onclick="toggleMainMenu(event)" aria-haspopup="true" aria-expanded="false" title="Menu">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>Menu
+        </button>
+        <div class="main-menu" id="mainMenu" role="menu">
+          <div class="mm-label">View</div>
+          <div class="mm-seg" id="viewModeMenu">
+            <button data-mode="normal" class="selected" onclick="setViewMode('normal')">Normal</button>
+            <button data-mode="week" onclick="setViewMode('week')">Week</button>
+            <button data-mode="month" onclick="setViewMode('month')">Month</button>
+          </div>
+          <button class="mm-item" id="monthFilterBtn" onclick="toggleMonthFilterDropdown(event)"><span class="ic">&#128197;</span><span id="monthFilterLabel">All Months</span><span class="mm-right" id="monthChevron">&#9656;</span></button>
+          <div class="mm-months" id="monthFilterMenu"></div>
+          <button class="mm-item" id="hideBtn" onclick="toggleShowHidden()"><span class="ic">&#128065;</span><span id="hideBtnLabel">Show Hidden</span></button>
+          <div class="mm-sep"></div>
+          <button class="mm-item" onclick="menuAction(openImport)"><span class="ic">&#8593;</span>Import</button>
+          <button class="mm-item" onclick="menuAction(openImportHistory)"><span class="ic">&#128339;</span>History<span class="log-count mm-right" id="importLogCount" style="display:none"></span></button>
+          <button class="mm-item" onclick="menuAction(openAddPerson)"><span class="ic">&#43;</span>Budtender</button>
+          <button class="mm-item" onclick="menuAction(openAddDay)"><span class="ic">&#43;</span>Day</button>
+          <button class="mm-item" onclick="menuAction(openChangeLog)"><span class="ic">&#9998;</span>Change Log</button>
+          <button class="mm-item" onclick="menuAction(exportCSV)"><span class="ic">&#8595;</span>Export</button>
+          <button class="mm-item" id="undoBtn" onclick="menuAction(undoLast)" disabled title="Undo last change (Ctrl/Cmd+Z)"><span class="ic">&#8630;</span>Undo<span class="mm-right" id="undoCount"></span></button>
+          <div class="mm-sep"></div>
+          <button class="mm-item danger" onclick="menuAction(confirmClear)"><span class="ic">&#10005;</span>Clear</button>
+          <button class="mm-item" onclick="menuAction(handleLock)"><span class="ic"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg></span>Sign Off</button>
         </div>
       </div>
-      <div class="dropdown">
-        <button class="dropdown-btn" id="monthFilterBtn" onclick="toggleMonthFilterDropdown(event)">All Months</button>
-        <div class="dropdown-menu" id="monthFilterMenu"></div>
-      </div>
-      <button class="btn" id="hideBtn" onclick="toggleShowHidden()">Show Hidden</button>
-      <button class="btn" onclick="openImport()">&#8593; Import</button>
-      <button class="btn" onclick="openImportHistory()">&#128339; History<span class="log-count" id="importLogCount" style="display:none"></span></button>
-      <button class="btn" onclick="openAddPerson()">&#43; Budtender</button>
-      <button class="btn" onclick="openAddDay()">&#43; Day</button>
-      <button class="btn" onclick="openChangeLog()">&#9998; Change Log</button>
-      <button class="btn" onclick="exportCSV()">&#8595; Export</button>
-      <button class="btn" id="undoBtn" onclick="undoLast()" disabled title="Undo last change (Ctrl/Cmd+Z)">&#8630; Undo</button>
-      <button class="btn danger" onclick="confirmClear()">Clear</button>
-      <button class="btn" onclick="handleLock()">&#128274; Lock</button>
     </div>
   </div>
   <div class="table-wrap" id="tableWrap">
@@ -678,7 +707,7 @@ function updateUndoBtn() {
   const b = document.getElementById('undoBtn');
   if (!b) return;
   b.disabled = !undoStack.length;
-  b.textContent = '\u21B6 Undo' + (undoStack.length ? ' (' + undoStack.length + ')' : '');
+  document.getElementById('undoCount').textContent = undoStack.length ? undoStack.length : '';
 }
 function undoLast() {
   if (!undoStack.length) { toast('Nothing to undo', 'error'); return; }
@@ -694,7 +723,7 @@ document.addEventListener('keydown', e => {
     const tag = (document.activeElement && document.activeElement.tagName) || '';
     if (tag === 'INPUT' || tag === 'TEXTAREA') return;
     if (document.querySelector('.modal-overlay.active')) return;
-    if (document.getElementById('undoBtn').offsetParent === null) return;
+    if (getComputedStyle(document.getElementById('appView')).display === 'none') return;
     e.preventDefault(); undoLast();
   }
 });
@@ -706,18 +735,48 @@ function saveData() {
   dataRef.set(attendanceData).catch(err => toast('Save failed: ' + err.message, 'error'));
   localStorage.setItem('bt_attendance_usq_gm', JSON.stringify(attendanceData));
 }
-function toggleViewDropdown(e) {
-  e.stopPropagation();
-  document.getElementById('viewModeMenu').classList.toggle('active');
+// ── Main (hamburger) menu ──
+function toggleMainMenu(e) {
+  if (e) e.stopPropagation();
+  const menu = document.getElementById('mainMenu');
+  const open = !menu.classList.contains('active');
+  menu.classList.toggle('active', open);
+  document.getElementById('menuBtn').setAttribute('aria-expanded', open);
   document.getElementById('ptsColMenu').classList.remove('active');
-  document.getElementById('monthFilterMenu').classList.remove('active');
+  if (!open) closeMonthList();
 }
+function closeMainMenu() {
+  document.getElementById('mainMenu').classList.remove('active');
+  document.getElementById('menuBtn').setAttribute('aria-expanded', 'false');
+  closeMonthList();
+}
+function menuAction(fn) { closeMainMenu(); fn(); }
+function closeMonthList() {
+  document.getElementById('monthFilterMenu').classList.remove('open');
+  document.getElementById('monthChevron').innerHTML = '&#9656;';
+}
+function monthLabel(mk) {
+  if (mk === 'all') return 'All Months';
+  const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  const [y,m] = mk.split('-');
+  return monthNames[parseInt(m)-1] + ' ' + y;
+}
+function updateViewStatus() {
+  const parts = [];
+  if (viewMode !== 'normal') parts.push(viewMode === 'week' ? 'Week View' : 'Month View');
+  if (monthFilter !== 'all') parts.push(monthLabel(monthFilter));
+  if (showHidden) parts.push('Showing hidden');
+  const el = document.getElementById('viewStatus');
+  el.textContent = parts.join(' · ');
+  el.style.display = parts.length ? '' : 'none';
+}
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && document.getElementById('mainMenu').classList.contains('active')) closeMainMenu();
+});
 function setViewMode(mode) {
   viewMode = mode;
-  const labels = { normal: 'Normal View', week: 'Week View', month: 'Month View' };
-  document.getElementById('viewModeBtn').textContent = labels[mode];
-  document.querySelectorAll('#viewModeMenu .dropdown-item').forEach(el => el.classList.toggle('selected', el.dataset.mode === mode));
-  document.getElementById('viewModeMenu').classList.remove('active');
+  document.querySelectorAll('#viewModeMenu button').forEach(el => el.classList.toggle('selected', el.dataset.mode === mode));
+  updateViewStatus();
   renderTable();
 }
 function setPtsMode(mode) {
@@ -733,15 +792,14 @@ function togglePtsDropdown(e) {
   menu.style.top = (rect.bottom + 4) + 'px';
   menu.style.left = rect.left + 'px';
   menu.classList.toggle('active');
-  document.getElementById('viewModeMenu').classList.remove('active');
-  document.getElementById('monthFilterMenu').classList.remove('active');
+  closeMainMenu();
 }
 function toggleMonthFilterDropdown(e) {
   e.stopPropagation();
   buildMonthFilterMenu();
-  document.getElementById('monthFilterMenu').classList.toggle('active');
-  document.getElementById('viewModeMenu').classList.remove('active');
-  document.getElementById('ptsColMenu').classList.remove('active');
+  const list = document.getElementById('monthFilterMenu');
+  const open = list.classList.toggle('open');
+  document.getElementById('monthChevron').innerHTML = open ? '&#9662;' : '&#9656;';
 }
 function buildMonthFilterMenu() {
   const monthSet = new Set();
@@ -758,21 +816,15 @@ function buildMonthFilterMenu() {
 }
 function setMonthFilter(mk) {
   monthFilter = mk;
-  const btn = document.getElementById('monthFilterBtn');
-  if (mk === 'all') { btn.textContent = 'All Months'; }
-  else {
-    const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
-    const [y,m] = mk.split('-');
-    btn.textContent = monthNames[parseInt(m)-1] + ' ' + y;
-  }
-  document.getElementById('monthFilterMenu').classList.remove('active');
+  document.getElementById('monthFilterLabel').textContent = monthLabel(mk);
+  closeMainMenu();
+  updateViewStatus();
   renderTable();
 }
 document.addEventListener('click', e => {
-  if (!e.target.closest('.dropdown') && !e.target.closest('.header-dropdown') && !e.target.closest('#ptsColMenu')) {
-    document.getElementById('viewModeMenu').classList.remove('active');
+  if (!e.target.closest('#menuWrap') && !e.target.closest('#viewStatus')) closeMainMenu();
+  if (!e.target.closest('.header-dropdown') && !e.target.closest('#ptsColMenu')) {
     document.getElementById('ptsColMenu').classList.remove('active');
-    document.getElementById('monthFilterMenu').classList.remove('active');
   }
 });
 function openImport() {
@@ -1175,10 +1227,10 @@ function getWriteupTagHtml(dates) {
 let showHidden=false;
 function toggleShowHidden() {
   showHidden=!showHidden;
-  const btn=document.getElementById('hideBtn');
-  btn.textContent=showHidden?'Hide Hidden':'Show Hidden';
-  btn.style.borderColor=showHidden?'rgba(108,140,255,0.4)':'';
-  btn.style.color=showHidden?'#6c8cff':'';
+  document.getElementById('hideBtnLabel').textContent=showHidden?'Hide Hidden':'Show Hidden';
+  document.getElementById('hideBtn').classList.toggle('on',showHidden);
+  closeMainMenu();
+  updateViewStatus();
   renderTable();
 }
 function toggleHidePerson() {
