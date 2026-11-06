@@ -146,7 +146,7 @@
   .name-badge.name-terminated.clickable:hover{text-decoration:line-through underline}
   .pf-status{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:10px 12px;border-radius:8px;border:1px solid var(--border);background:var(--surface2);font-size:0.8rem;margin-bottom:14px}
   .pf-status.warn{border-color:rgba(255,107,122,0.4);background:rgba(255,107,122,0.08);color:var(--red)}
-  .pf-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:16px}
+  .pf-stats{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:16px}
   .pf-stat{padding:10px 8px;border-radius:8px;border:1px solid var(--border);background:var(--surface2);text-align:center}
   .pf-stat .v{font-size:1.25rem;font-weight:700;line-height:1.1}
   .pf-stat .l{font-size:0.6rem;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.04em;margin-top:4px}
@@ -157,7 +157,7 @@
   .pf-row{display:flex;gap:6px;align-items:center}
   .pf-row a{color:var(--accent);font-size:0.72rem;white-space:nowrap;text-decoration:none}
   .pf-missing{color:var(--text-muted);font-style:italic}
-  @media (max-width:520px){.pf-stats{grid-template-columns:repeat(2,1fr)}}
+  @media (max-width:560px){.pf-stats{grid-template-columns:repeat(3,1fr)}}
   .ca-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;margin-bottom:12px}
   .ca-grid label{display:block;font-size:0.65rem;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:4px}
   .ca-grid input,.ca-grid select{width:100%;padding:7px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-family:inherit;font-size:0.8rem;outline:none;color-scheme:dark}
@@ -451,7 +451,7 @@
 </div>
 
 <div class="modal-overlay" id="profileModal" onclick="if(event.target===this)closeProfile()">
-  <div class="modal" style="width:480px">
+  <div class="modal" style="width:560px">
     <h3 id="pfName">Budtender</h3>
     <p class="subtitle" id="pfSub"></p>
     <div class="pf-status" id="pfStatus"></div>
@@ -1096,6 +1096,18 @@ function parseDate(dateStr) {
 function getLast60Pts(dates) {
   const today = new Date(); today.setHours(0,0,0,0);
   const cutoff = new Date(today); cutoff.setDate(cutoff.getDate() - 60);
+  let pts = 0;
+  Object.entries(dates).forEach(([d,v]) => {
+    const ed = parseDate(d); if (!ed) return; ed.setHours(0,0,0,0);
+    if (ed >= cutoff && ed <= today) pts += getPoints(v);
+  });
+  return pts;
+}
+// Points from the last N days (today included), or the last N calendar months when unit is 'months'
+function getPtsSince(dates, n, unit) {
+  const today = new Date(); today.setHours(0,0,0,0);
+  const cutoff = new Date(today);
+  if (unit === 'months') cutoff.setMonth(cutoff.getMonth() - n); else cutoff.setDate(cutoff.getDate() - n);
   let pts = 0;
   Object.entries(dates).forEach(([d,v]) => {
     const ed = parseDate(d); if (!ed) return; ed.setHours(0,0,0,0);
@@ -2038,10 +2050,11 @@ function openProfile(key) {
   }
   if (needs) { status += ' <strong>Next corrective due: ' + CA_STAGES[caNextStage(dates)].label + '</strong> (' + fmtPts(caCurrentPts(dates)) + ' pts).'; warn = true; }
   const st = document.getElementById('pfStatus'); st.innerHTML = status; st.className = 'pf-status' + (warn ? ' warn' : '');
-  const annual = getAnnualPts(dates), l60 = getLast60Pts(dates), wpt = getWriteupPts(dates), sto = getStoRemaining(dates);
+  const annual = getAnnualPts(dates), m6 = getPtsSince(dates, 6, 'months'), d90 = getPtsSince(dates, 90), wpt = getWriteupPts(dates), sto = getStoRemaining(dates);
   document.getElementById('pfStats').innerHTML = [
     [fp(annual), 'Annual pts', ptsColor(annual)],
-    [fp(l60), 'Last 60 days', ptsColor(l60)],
+    [fp(m6), 'Last 6 months', ptsColor(m6)],
+    [fp(d90), 'Last 90 days', ptsColor(d90)],
     [fp(wpt), 'Since write-up', ptsColor(wpt)],
     [fmtStoHrs(sto), 'PS&amp;STO hrs left', stoColorClass(sto)]
   ].map(([v, l, c]) => `<div class="pf-stat"><div class="v ${c}">${v}</div><div class="l">${l}</div></div>`).join('');
