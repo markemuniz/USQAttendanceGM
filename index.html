@@ -141,6 +141,23 @@
   .ca-folder:hover{background:rgba(255,107,122,0.25)}
   .ca-folder svg{width:13px;height:13px}
   .ca-modal{width:860px;max-width:96vw}
+  .name-badge.clickable{cursor:pointer;transition:filter 0.15s}
+  .name-badge.clickable:hover{filter:brightness(1.35);text-decoration:underline}
+  .name-badge.name-terminated.clickable:hover{text-decoration:line-through underline}
+  .pf-status{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:10px 12px;border-radius:8px;border:1px solid var(--border);background:var(--surface2);font-size:0.8rem;margin-bottom:14px}
+  .pf-status.warn{border-color:rgba(255,107,122,0.4);background:rgba(255,107,122,0.08);color:var(--red)}
+  .pf-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:16px}
+  .pf-stat{padding:10px 8px;border-radius:8px;border:1px solid var(--border);background:var(--surface2);text-align:center}
+  .pf-stat .v{font-size:1.25rem;font-weight:700;line-height:1.1}
+  .pf-stat .l{font-size:0.6rem;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.04em;margin-top:4px}
+  .pf-fields{display:grid;grid-template-columns:110px 1fr;gap:8px 10px;align-items:center;font-size:0.8rem}
+  .pf-fields .k{font-size:0.65rem;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.04em}
+  .pf-fields input{width:100%;padding:6px 9px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-family:inherit;font-size:0.8rem;outline:none}
+  .pf-fields input:focus{border-color:var(--accent)}
+  .pf-row{display:flex;gap:6px;align-items:center}
+  .pf-row a{color:var(--accent);font-size:0.72rem;white-space:nowrap;text-decoration:none}
+  .pf-missing{color:var(--text-muted);font-style:italic}
+  @media (max-width:520px){.pf-stats{grid-template-columns:repeat(2,1fr)}}
   .ca-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;margin-bottom:12px}
   .ca-grid label{display:block;font-size:0.65rem;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:4px}
   .ca-grid input,.ca-grid select{width:100%;padding:7px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-family:inherit;font-size:0.8rem;outline:none;color-scheme:dark}
@@ -429,6 +446,28 @@
     <div class="modal-actions">
       <button class="btn" onclick="closeAddDay()">Close</button>
       <button class="btn primary" onclick="saveAddDay()">Add Day</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="profileModal" onclick="if(event.target===this)closeProfile()">
+  <div class="modal" style="width:480px">
+    <h3 id="pfName">Budtender</h3>
+    <p class="subtitle" id="pfSub"></p>
+    <div class="pf-status" id="pfStatus"></div>
+    <div class="pf-stats" id="pfStats"></div>
+    <div class="pf-fields">
+      <div class="k">Employee ID</div><div><input type="text" id="pfId" placeholder="Not on file"></div>
+      <div class="k">Email</div><div class="pf-row"><input type="email" id="pfEmail" placeholder="Not on file"><a id="pfEmailLink" href="#" target="_blank" rel="noopener">Email</a></div>
+      <div class="k">Phone</div><div class="pf-row"><input type="tel" id="pfPhone" placeholder="Not on file"><a id="pfPhoneLink" href="#">Call</a></div>
+      <div class="k">Position</div><div id="pfPos" style="font-size:0.78rem"></div>
+    </div>
+    <div class="modal-actions" style="justify-content:space-between;flex-wrap:wrap">
+      <div><button class="btn" id="pfCABtn" onclick="profileOpenCA()" style="display:none;color:var(--red);border-color:rgba(255,107,122,0.4)">Open corrective action</button></div>
+      <div style="display:flex;gap:8px">
+        <button class="btn" onclick="closeProfile()">Close</button>
+        <button class="btn primary" onclick="saveProfile()">Save</button>
+      </div>
     </div>
   </div>
 </div>
@@ -1231,7 +1270,7 @@ function renderTable() {
     } else {
       cells=filteredDates.map(d=>{ const v=dates[d]||''; const hasUserNote=!!(userNotes[d]&&userNotes[d].trim()); const starHtml=hasUserNote?'<span class="note-star">&#9733;</span>':''; const lastEd=getCellEdits(person,d)[0]; const tip=[hasUserNote?userNotes[d]:'', lastEd?('Edited by '+lastEd.who+' \u00b7 '+fmtEditTs(lastEd.ts)):''].filter(Boolean).join('\n'); const titleAttr=tip?` title="${tip.replace(/&/g,'&amp;').replace(/"/g,'&quot;')}"`:'' ; return `<td class="date-cell" onclick="openEdit('${key.replace(/'/g,"\\'")}','${d}')"${titleAttr}>${cellHtml(v)}${starHtml}</td>`; }).join('');
     }
-    return `<tr><td class="${stoColorClass(stoRem)}" title="${getStoUsedMins(dates)>0?fmtMins(getStoUsedMins(dates))+' used of '+STO_ANNUAL_HOURS+':00':'No PS&STO used'}">${fmtStoHrs(stoRem)}</td><td><span class="name-badge ${nc}">${fn}</span></td><td><span class="name-badge ${nc}">${ln}</span>${wuTag}${caFolder}</td><td class="${ptsColor(mainPts)}">${mainPts>0?mainPts%1===0?mainPts:mainPts.toFixed(1):'0'}</td><td class="${ptsColor(wp)}">${wp>0?wp%1===0?wp:wp.toFixed(1):'0'}</td>${cells}</tr>`;
+    return `<tr><td class="${stoColorClass(stoRem)}" title="${getStoUsedMins(dates)>0?fmtMins(getStoUsedMins(dates))+' used of '+STO_ANNUAL_HOURS+':00':'No PS&STO used'}">${fmtStoHrs(stoRem)}</td><td><span class="name-badge clickable ${nc}" data-key="${escHtml(key)}" onclick="openProfile(this.dataset.key)" title="View profile">${fn}</span></td><td><span class="name-badge clickable ${nc}" data-key="${escHtml(key)}" onclick="openProfile(this.dataset.key)" title="View profile">${ln}</span>${wuTag}${caFolder}</td><td class="${ptsColor(mainPts)}">${mainPts>0?mainPts%1===0?mainPts:mainPts.toFixed(1):'0'}</td><td class="${ptsColor(wp)}">${wp>0?wp%1===0?wp:wp.toFixed(1):'0'}</td>${cells}</tr>`;
   }).join('');
   updateCABanner();
 }
@@ -1433,7 +1472,12 @@ const CA_FOLDER_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor
 const CA_CONFIG = { company: 'The Travel Agency: USQ', supervisor: 'Jennifer Bartholomeo', location: 'USQ', title: 'Budtender', emailTo: 'Melissa' };
 // First names of supervisors; anyone else defaults to CA_CONFIG.title
 const CA_SUPERVISORS = [];   // add USQ supervisors' first names (lowercase) here
-function caTitleFor(fn) { return CA_SUPERVISORS.includes((fn || '').trim().split(/\s+/)[0].toLowerCase()) ? 'Supervisor' : CA_CONFIG.title; }
+function caTitleFor(fn, ln) {
+  if (CA_SUPERVISORS.includes((fn || '').trim().split(/\s+/)[0].toLowerCase())) return 'Supervisor';
+  const e = ln !== undefined ? findEmployee(fn, ln) : null;
+  if (e && /supervisor/i.test(e.positions || '')) return 'Supervisor';
+  return CA_CONFIG.title;
+}
 const CA_THRESHOLD = 3;
 const CA_STAGES = {
   first:       { label: 'First Warning',  marker: '1st' },
@@ -1441,7 +1485,7 @@ const CA_STAGES = {
   final:       { label: 'Final Warning',  marker: 'Final' },
   termination: { label: 'Termination',    marker: 'Terminated' }
 };
-let employees = {};       // { "first_last": { first, last, id } } — lives in Firebase, never in the repo
+let employees = {};       // { "first_last": { first, last, id, email, phone, positions } } — lives in Firebase, never in the repo
 let pendingEmployees = null;
 let caPerson = null;      // attendanceData key of the person in the modal
 let caOccurrences = [];
@@ -1464,38 +1508,57 @@ function loadEmployees() {
     try { localStorage.setItem('bt_employees_usq_gm', JSON.stringify(employees)); } catch(e) {}
   }, err => console.warn('Employees load failed, using cached list:', err.message));
 }
+function fmtPhone(v) {
+  let d = String(v == null ? '' : v).replace(/\D/g, '');
+  if (d.length === 11 && d[0] === '1') d = d.slice(1);
+  return d.length === 10 ? '(' + d.slice(0,3) + ') ' + d.slice(3,6) + '-' + d.slice(6) : String(v == null ? '' : v).trim();
+}
+function saveEmployees() {
+  try { localStorage.setItem('bt_employees_usq_gm', JSON.stringify(employees)); } catch(e) {}
+  return employeesRef.set(employees).catch(err => toast('Employee list save failed: ' + err.message, 'error'));
+}
 function parseEmployeeList(rows, cols) {
   const fnCol = cols.find(c => /first.?name/i.test(c));
   const lnCol = cols.find(c => /last.?name/i.test(c));
   const idCol = cols.find(c => /employee.?(id|number|no)/i.test(c));
+  const emCol = cols.find(c => /e-?mail/i.test(c));
+  const phCol = cols.find(c => /phone|mobile|cell/i.test(c));
+  const posCol = cols.find(c => /position|job.?title|role/i.test(c));
+  const val = (r, c) => (c && r[c] !== undefined && r[c] !== null) ? (r[c] === 0 ? '0' : String(r[c])).trim() : '';
   const map = {};
   rows.forEach(r => {
-    const fn = (r[fnCol] || '').toString().trim(), ln = (r[lnCol] || '').toString().trim();
-    const id = (r[idCol] === 0 ? '0' : (r[idCol] || '')).toString().trim();
-    if (!fn || !ln || !id) return;
-    map[empKey(fn, ln)] = { first: fn, last: ln, id };
+    const fn = val(r, fnCol), ln = val(r, lnCol);
+    if (!fn || !ln) return;
+    map[empKey(fn, ln)] = { first: fn, last: ln, id: val(r, idCol), email: val(r, emCol), phone: fmtPhone(val(r, phCol)), positions: val(r, posCol) };
   });
-  const n = Object.keys(map).length;
-  if (!n) { toast('No employees with an ID found in this file', 'error'); return; }
+  const list = Object.values(map), n = list.length;
+  if (!n) { toast('No employees found in this file', 'error'); return; }
   pendingEmployees = map;
   pendingImport = null;
+  const missing = list.filter(e => !e.id && !((employees[empKey(e.first, e.last)] || {}).id));
   const p = document.getElementById('importPreview');
-  p.innerHTML = `<p style="margin-bottom:8px"><strong>${n}</strong> employee IDs (used to fill corrective action forms)</p>
-    <table><thead><tr><th>Name</th><th>ID</th></tr></thead><tbody>
-    ${Object.values(map).slice(0,15).map(e => `<tr><td>${escHtml(e.first)} ${escHtml(e.last)}</td><td>${escHtml(e.id)}</td></tr>`).join('')}
-    ${n>15?`<tr><td colspan="2" style="color:var(--text-muted)">...+${n-15} more</td></tr>`:''}
+  p.innerHTML = `<p style="margin-bottom:8px"><strong>${n}</strong> employees (ID, email, phone and position, used for profiles and corrective action forms)</p>
+    ${missing.length ? `<p style="margin-bottom:8px;color:var(--yellow,#facc15);font-size:0.75rem">${missing.length} with no employee ID in this file: ${missing.map(e => escHtml(e.first + ' ' + e.last)).join(', ')}. You can add their IDs from their profile.</p>` : ''}
+    <table><thead><tr><th>Name</th><th>ID</th><th>Email</th><th>Phone</th></tr></thead><tbody>
+    ${list.slice(0,15).map(e => `<tr><td>${escHtml(e.first)} ${escHtml(e.last)}</td><td>${escHtml(e.id) || '<span style="color:var(--text-muted)">none</span>'}</td><td>${escHtml(e.email)}</td><td>${escHtml(e.phone)}</td></tr>`).join('')}
+    ${n>15?`<tr><td colspan="4" style="color:var(--text-muted)">...+${n-15} more</td></tr>`:''}
     </tbody></table>`;
   p.style.display = 'block';
   document.getElementById('confirmImportBtn').style.display = 'inline-flex';
 }
 function confirmEmployeeImport() {
   const map = pendingEmployees; pendingEmployees = null;
-  employees = map;
-  try { localStorage.setItem('bt_employees_usq_gm', JSON.stringify(employees)); } catch(e) {}
-  employeesRef.set(map).catch(err => toast('Employee list save failed: ' + err.message, 'error'));
+  // merge: the new file wins, but never blanks out a value already on file (e.g. an ID typed in by hand)
+  Object.entries(map).forEach(([k, e]) => {
+    const old = employees[k] || {};
+    const merged = { ...old };
+    Object.entries(e).forEach(([f, v]) => { if (v) merged[f] = v; else if (!(f in merged)) merged[f] = ''; });
+    employees[k] = merged;
+  });
+  saveEmployees();
   closeImport();
   renderTable();
-  toast('Saved ' + Object.keys(map).length + ' employee IDs', 'success');
+  toast('Saved ' + Object.keys(map).length + ' employees', 'success');
 }
 // Older versions imported the ID file as attendance, leaving each ID in the person's row
 // under an "Employee ID" pseudo-date. Read the ID from there when the employee list has none.
@@ -1516,13 +1579,28 @@ function findRowEmployeeId(fn, ln) {
   }
   return '';
 }
-function findEmployeeId(fn, ln) {
-  const exact = employees[empKey(fn, ln)];
-  if (exact) return exact.id || '';
-  // nicknames / short forms (Will vs William): same last name, one first name starts with the other
-  const f = fn.toLowerCase(), l = ln.toLowerCase();
-  const hits = Object.values(employees).filter(e => (e.last || '').toLowerCase() === l && f && (e.first || '').toLowerCase() && ((e.first.toLowerCase().startsWith(f)) || f.startsWith(e.first.toLowerCase())));
-  return hits.length === 1 ? (hits[0].id || '') : '';
+// Returns { key, rec } for the employee-list entry matching this name, or null.
+function findEmployeeEntry(fn, ln) {
+  fn = fn || ''; ln = ln || '';
+  const k = empKey(fn, ln);
+  if (employees[k]) return { key: k, rec: employees[k] };
+  // nicknames / short forms (Will vs William, Vasia vs Sylvasia): same last name, one first name starts or ends with the other
+  const f = fn.toLowerCase().trim(), l = ln.toLowerCase().trim();
+  if (!f || !l) return null;
+  const hits = Object.entries(employees).filter(([, e]) => {
+    const ef = (e.first || '').toLowerCase().trim();
+    return (e.last || '').toLowerCase().trim() === l && ef && (ef.startsWith(f) || f.startsWith(ef) || ef.endsWith(f) || f.endsWith(ef));
+  });
+  return hits.length === 1 ? { key: hits[0][0], rec: hits[0][1] } : null;
+}
+function findEmployee(fn, ln) { const h = findEmployeeEntry(fn, ln); return h ? h.rec : null; }
+function findEmployeeId(fn, ln) { const e = findEmployee(fn, ln); return e ? (e.id || '') : ''; }
+// Save a field onto this person's employee record (creating one if needed).
+function setEmployeeFields(fn, ln, fields) {
+  const h = findEmployeeEntry(fn, ln);
+  const key = h ? h.key : empKey(fn, ln);
+  employees[key] = { first: fn, last: ln, id: '', email: '', phone: '', positions: '', ...(h ? h.rec : {}), ...fields };
+  return saveEmployees();
 }
 
 // ── Who needs a corrective action, and which one ──
@@ -1681,7 +1759,7 @@ function caAlertContent(k) {
     const d = {
       first: nm.fn, last: nm.ln, stage, date: todayYMD(),
       empId: findEmployeeId(nm.fn, nm.ln) || caRowId(p) || findRowEmployeeId(nm.fn, nm.ln) || '',
-      title: caTitleFor(nm.fn), supervisor: CA_CONFIG.supervisor, location: CA_CONFIG.location,
+      title: caTitleFor(nm.fn, nm.ln), supervisor: CA_CONFIG.supervisor, location: CA_CONFIG.location,
       sickRemaining: getStoRemaining(dates),
       occurrences: caGetOccurrences(p),
       prior: stage === 'first' ? [] : caGetPriorCycles(p)
@@ -1889,7 +1967,7 @@ function openCA(key) {
   const id = findEmployeeId(nm.fn, nm.ln) || caRowId(p) || findRowEmployeeId(nm.fn, nm.ln);
   document.getElementById('caEmpId').value = id;
   document.getElementById('caEmpId').placeholder = Object.keys(employees).length ? 'Not found in employee list' : 'Import employee ID list first';
-  document.getElementById('caTitle').value = caTitleFor(nm.fn);
+  document.getElementById('caTitle').value = caTitleFor(nm.fn, nm.ln);
   document.getElementById('caSupervisor').value = CA_CONFIG.supervisor;
   document.getElementById('caLocation').value = CA_CONFIG.location;
   document.getElementById('caEmailTo').value = CA_CONFIG.emailTo;
@@ -1919,10 +1997,74 @@ function caRecord() {
   if (Object.keys(dates).some(k => k > d.date && getPoints(dates[k]))) { toast('Form date must be on or after their last occurrence', 'error'); return; }
   if (dates[d.date] && String(dates[d.date]).trim() !== marker) { toast('That date already has an entry (' + dates[d.date] + ') — pick an empty date', 'error'); return; }
   dates[d.date] = marker;
-  const name = splitName(p.displayName || caPerson).fn;
+  const nmFull = splitName(p.displayName || caPerson);
+  if (d.empId && d.empId !== findEmployeeId(nmFull.fn, nmFull.ln)) setEmployeeFields(nmFull.fn, nmFull.ln, { id: d.empId });
+  const name = nmFull.fn;
   saveData(); rebuildDates(); renderTable(); closeCA();
   toast(marker + ' recorded for ' + name, 'success');
 }
+// ── Budtender profile (click a name) ──
+let pfPerson = null;
+function fmtUSShort(ds) { return /^\d{4}-\d{2}-\d{2}/.test(ds) ? fmtUS(ds) : ds; }
+function pfLatestWriteupInfo(dates) {
+  const labels = { '1st': 'First Warning', '2nd': 'Second Warning', 'final': 'Final Warning', 'terminated': 'Terminated', 'term': 'Terminated', 'completed': 'Completed' };
+  let out = null;
+  Object.entries(dates).sort((a,b)=>a[0].localeCompare(b[0])).forEach(([d,v]) => { const val = (v||'').toString().trim().toLowerCase(); if (labels[val]) out = { val, label: labels[val], date: d }; });
+  return out;
+}
+function pfLinks() {
+  const em = document.getElementById('pfEmail').value.trim(), ph = document.getElementById('pfPhone').value.trim();
+  const el = document.getElementById('pfEmailLink'), pl = document.getElementById('pfPhoneLink');
+  el.style.visibility = em ? 'visible' : 'hidden'; el.href = em ? 'mailto:' + em : '#';
+  pl.style.visibility = ph ? 'visible' : 'hidden'; pl.href = ph ? 'tel:' + ph.replace(/[^\d+]/g, '') : '#';
+}
+function openProfile(key) {
+  const p = attendanceData[key]; if (!p) return;
+  pfPerson = key;
+  const dates = p.dates || {}, nm = splitName(p.displayName || key);
+  const e = findEmployee(nm.fn, nm.ln) || {};
+  const termed = isTerminated(dates), wu = pfLatestWriteupInfo(dates), needs = caNeeds(p);
+  const fp = v => v > 0 ? fmtPts(v) : '0';
+  document.getElementById('pfName').textContent = nm.fn + ' ' + nm.ln;
+  document.getElementById('pfSub').textContent = (e.first && (e.first + ' ' + e.last).toLowerCase() !== (nm.fn + ' ' + nm.ln).toLowerCase()) ? 'Employee list name: ' + e.first + ' ' + e.last : (p.hidden ? 'Hidden from the tracker' : '');
+  // corrective status
+  let status, warn = false;
+  if (termed) { status = '<span class="writeup-tag wu-term" style="margin:0">Term</span> Terminated' + (wu && wu.label === 'Terminated' ? ' on ' + fmtUSShort(wu.date) : ''); warn = true; }
+  else if (wu && ['1st','2nd','final'].includes(wu.val)) {
+    status = getWriteupTagHtml(dates).replace('margin-left:6px', '') + ' On a corrective action: <strong>' + wu.label + '</strong> issued ' + fmtUSShort(wu.date) + '. ' + fp(getWriteupPts(dates)) + ' pts since.';
+    warn = true;
+  } else {
+    status = 'Not on a corrective action' + (wu && wu.val === 'completed' ? ' (last cycle completed ' + fmtUSShort(wu.date) + ')' : '') + '.';
+  }
+  if (needs) { status += ' <strong>Next corrective due: ' + CA_STAGES[caNextStage(dates)].label + '</strong> (' + fmtPts(caCurrentPts(dates)) + ' pts).'; warn = true; }
+  const st = document.getElementById('pfStatus'); st.innerHTML = status; st.className = 'pf-status' + (warn ? ' warn' : '');
+  const annual = getAnnualPts(dates), l60 = getLast60Pts(dates), wpt = getWriteupPts(dates), sto = getStoRemaining(dates);
+  document.getElementById('pfStats').innerHTML = [
+    [fp(annual), 'Annual pts', ptsColor(annual)],
+    [fp(l60), 'Last 60 days', ptsColor(l60)],
+    [fp(wpt), 'Since write-up', ptsColor(wpt)],
+    [fmtStoHrs(sto), 'PS&amp;STO hrs left', stoColorClass(sto)]
+  ].map(([v, l, c]) => `<div class="pf-stat"><div class="v ${c}">${v}</div><div class="l">${l}</div></div>`).join('');
+  document.getElementById('pfId').value = e.id || caRowId(p) || '';
+  document.getElementById('pfEmail').value = e.email || '';
+  document.getElementById('pfPhone').value = e.phone || '';
+  document.getElementById('pfPos').innerHTML = e.positions ? escHtml(e.positions) : '<span class="pf-missing">' + (Object.keys(employees).length ? 'Not in employee list' : 'Import the employee list to fill this in') + '</span>';
+  document.getElementById('pfCABtn').style.display = needs ? 'inline-flex' : 'none';
+  pfLinks();
+  document.getElementById('profileModal').classList.add('active');
+}
+function closeProfile() { document.getElementById('profileModal').classList.remove('active'); pfPerson = null; }
+function saveProfile() {
+  if (!pfPerson || !attendanceData[pfPerson]) return;
+  const nm = splitName(attendanceData[pfPerson].displayName || pfPerson);
+  const phone = fmtPhone(document.getElementById('pfPhone').value);
+  setEmployeeFields(nm.fn, nm.ln, { id: document.getElementById('pfId').value.trim(), email: document.getElementById('pfEmail').value.trim(), phone });
+  closeProfile();
+  toast('Profile saved for ' + nm.fn, 'success');
+}
+function profileOpenCA() { const k = pfPerson; closeProfile(); openCA(k); }
+['pfEmail','pfPhone'].forEach(id => document.getElementById(id).addEventListener('input', pfLinks));
+['pfId','pfEmail','pfPhone'].forEach(id => document.getElementById(id).addEventListener('keydown', e => { if (e.key === 'Enter') saveProfile(); }));
 // ───────────────────────────────────────────────────────────────
 function toast(msg,type) {
   const t=document.getElementById('toast');
