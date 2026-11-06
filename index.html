@@ -300,9 +300,10 @@
   </div>
 </div>
 
-<div class="dropdown-menu" id="ptsColMenu" style="position:fixed;z-index:100">
+<div class="dropdown-menu" id="ptsColMenu" style="position:fixed;z-index:100;right:auto;width:max-content">
   <div class="dropdown-item selected" data-mode="annual" onclick="setPtsMode('annual')">Annual Pts</div>
-  <div class="dropdown-item" data-mode="60days" onclick="setPtsMode('60days')">Last 60 Days</div>
+  <div class="dropdown-item" data-mode="6months" onclick="setPtsMode('6months')">Last 6 Months</div>
+  <div class="dropdown-item" data-mode="90days" onclick="setPtsMode('90days')">Last 90 Days</div>
 </div>
 
 <div class="modal-overlay" id="editModal">
@@ -1155,7 +1156,7 @@ function getLatestWriteup(dates) {
 }
 function getNameColor(dates, terminated, shownPts) {
   if (terminated) return 'name-terminated';
-  // Color follows the points column on screen (Annual or Last 60 Days)
+  // Color follows the points column on screen (Annual, Last 6 Months or Last 90 Days)
   const pts=(typeof shownPts==='number')?shownPts:(getLatestWriteup(dates)!==null?getWriteupPts(dates):getLast60Pts(dates));
   if (pts>=3) return 'name-red';
   if (pts>=2) return 'name-orange';
@@ -1245,7 +1246,7 @@ function renderTable() {
   document.getElementById('emptyState').style.display='none';
   document.getElementById('mainTable').style.display='';
   const periodInfo=buildPeriods();
-  const ptsLabel=ptsMode==='60days'?'Last 60 Days':'Annual Pts';
+  const ptsLabel={annual:'Annual Pts','6months':'Last 6 Months','90days':'Last 90 Days'}[ptsMode]||'Annual Pts';
   const filteredDates=monthFilter==='all'?allDates:allDates.filter(d=>d.substring(0,7)===monthFilter);
   let filteredPeriods=null;
   if (periodInfo) {
@@ -1270,7 +1271,7 @@ function renderTable() {
     if (name.includes(',')) { const parts=name.split(',').map(s=>s.trim()); ln=parts[0]; fn=parts[1]||''; }
     else { const parts=name.split(' ').map(s=>s.trim()).filter(Boolean); if (parts.length>=2) { fn=parts[0]; ln=parts.slice(1).join(' '); } else { fn=parts[0]||name; ln=''; } }
     const dates=person.dates||{}, userNotes=person.userNotes||{};
-    const mainPts=ptsMode==='60days'?getLast60Pts(dates):getAnnualPts(dates);
+    const mainPts=ptsMode==='6months'?getPtsSince(dates,6,'months'):ptsMode==='90days'?getPtsSince(dates,90):getAnnualPts(dates);
     const wp=getWriteupPts(dates);
     if (!showHidden&&person.hidden) return '';
     const termed=isTerminated(dates), nc=getNameColor(dates,termed,mainPts), wuTag=getWriteupTagHtml(dates);
