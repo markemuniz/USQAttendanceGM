@@ -251,6 +251,15 @@
   tbody td.date-cell.sched-on.sched-sick{background:rgba(56,189,248,0.10);box-shadow:inset 0 0 0 1px rgba(56,189,248,0.30)}
   tbody td.date-cell.sched-on.sched-sick:hover{background:rgba(56,189,248,0.18)}
   .sched-sick .sch-time{color:#7dd3fc}
+  /* Approved time off (When I Work Time-Off Requests): faint yellow; approved sick time: faint pink + 🤒 */
+  tbody td.date-cell.to-off{background:rgba(250,204,21,0.14);box-shadow:inset 0 0 0 1px rgba(250,204,21,0.38)}
+  tbody td.date-cell.to-off:hover{background:rgba(250,204,21,0.22)}
+  .to-off .sch-time{color:#fcd34d}
+  tbody td.date-cell.to-sick{background:rgba(244,114,182,0.12);box-shadow:inset 0 0 0 1px rgba(244,114,182,0.34)}
+  tbody td.date-cell.to-sick:hover{background:rgba(244,114,182,0.20)}
+  .to-sick .sch-time{color:#f9a8d4}
+  .to-emoji{font-size:0.8rem;line-height:1;margin-right:3px;vertical-align:-1px}
+  .to-emoji:only-child{margin-right:0}
   .sch-ok{background:#4ade80}
   .sch-warn{background:#f59e0b}
   .sch-bad{background:#ff6b7a}
@@ -284,6 +293,8 @@
   .cal-excused{background:rgba(108,140,255,0.3)!important;color:#9fb2ff!important}
   .cal-sick{background:rgba(56,189,248,0.28)!important;color:#7dd3fc!important}
   .cal-sched{background:var(--surface3);box-shadow:inset 0 0 0 1px rgba(74,222,128,0.55);color:#4ade80!important}
+  .cal-tooff{background:rgba(250,204,21,0.22)!important;color:#fde68a!important}
+  .cal-tosick{background:rgba(244,114,182,0.30)!important;color:#f9a8d4!important}
   .pf-cal-day.cal-wu::after{content:'';position:absolute;top:2px;right:2px;width:5px;height:5px;border-radius:50%;background:#facc15}
   .pf-cal-summary{display:flex;flex-wrap:wrap;gap:6px 14px;margin-top:12px;font-size:0.74rem;color:var(--text)}
   .pf-cal-count i,.pf-cal-legend i{display:inline-block;width:11px;height:11px;border-radius:3px;margin-right:5px;vertical-align:-1px}
@@ -344,6 +355,9 @@
       <div class="key-item"><span style="color:#facc15;font-size:0.85rem">&#9733;</span> Has note</div>
       <div class="key-sep sched-key"></div>
       <div class="key-item sched-key"><div class="key-swatch" style="background:rgba(74,222,128,0.22);border:1px solid rgba(74,222,128,0.55)"></div> Scheduled (shift time shown)</div>
+      <div class="key-sep to-key"></div>
+      <div class="key-item to-key"><div class="key-swatch" style="background:rgba(250,204,21,0.20);border:1px solid rgba(250,204,21,0.5)"></div> Approved time off</div>
+      <div class="key-item to-key"><div class="key-swatch" style="background:rgba(244,114,182,0.24);border:1px solid rgba(244,114,182,0.55)"></div> &#129298; Approved sick time</div>
       <div class="key-sep"></div>
       <div class="key-item"><span class="ca-folder" style="margin-left:0;cursor:default"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></span> Corrective action needed (click to open)</div>
     </div>
@@ -406,6 +420,7 @@
     <h3 id="editTitle" style="font-style:italic">Edit Entry</h3>
     <p class="subtitle" id="editSubtitle"></p>
     <div id="editNote" style="display:none;margin-bottom:14px;padding:8px 12px;background:rgba(108,140,255,0.06);border:1px solid rgba(108,140,255,0.15);border-radius:8px;font-size:0.75rem;color:var(--text-dim);line-height:1.5"></div>
+    <div id="editTimeOff" class="sched-box" style="display:none"></div>
     <div id="editSched" class="sched-box" style="display:none"></div>
     <div style="margin-bottom:14px">
       <label style="display:block;font-size:0.72rem;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:6px">Value</label>
@@ -594,6 +609,7 @@ const importLogRef = firebase.database().ref('importLog_usq_gm');
 const employeesRef = firebase.database().ref('employees_usq_gm');
 const caAlertsRef = firebase.database().ref('caAlertsSent_usq_gm');
 const schedRef = firebase.database().ref('schedule_usq_gm');
+const timeOffRef = firebase.database().ref('timeoff_usq_gm');
 
 let currentUserEmail = '';
 let importLogEntries = []; // sorted newest first
@@ -719,6 +735,7 @@ function showApp() {
   loadEmployees();
   loadCAAlerts();
   loadSchedule();
+  loadTimeOff();
 }
 auth.onAuthStateChanged(user => {
   if (user && !isAllowedEmail(user.email)) {
@@ -745,6 +762,8 @@ let editingDate = null;
 let pendingImport = null;
 let schedData = {};          // Firebase "schedule_usq_gm" (When I Work shifts + punches), see Schedule section
 let pendingSchedule = null;  // Shifts / Timesheets files waiting on "Import Data"
+let timeOffData = {};        // Firebase "timeoff_usq_gm": approved time off by person and day, see Time Off section
+let pendingTimeOff = null;   // Time-off report days waiting on "Import Data"
 let showSched = true;
 try { showSched = localStorage.getItem('bt_showSched_usq_gm') !== '0'; } catch(e) {}
 let viewMode = 'normal';
@@ -905,13 +924,13 @@ document.addEventListener('click', e => {
 });
 function openImport() {
   document.getElementById('importModal').classList.add('active');
-  pendingImport = null; pendingEmployees = null; pendingSchedule = null;
+  pendingImport = null; pendingEmployees = null; pendingSchedule = null; pendingTimeOff = null;
   document.getElementById('importPreview').style.display = 'none';
   document.getElementById('confirmImportBtn').style.display = 'none';
   document.getElementById('confirmImportBtn').textContent = 'Import Data';
   renderSchedPreview();
 }
-function closeImport() { document.getElementById('importModal').classList.remove('active'); pendingImport = null; pendingEmployees = null; pendingSchedule = null; renderSchedPreview(); }
+function closeImport() { document.getElementById('importModal').classList.remove('active'); pendingImport = null; pendingEmployees = null; pendingSchedule = null; pendingTimeOff = null; renderSchedPreview(); }
 const dropZone = document.getElementById('dropZone');
 const fileInput = document.getElementById('fileInput');
 dropZone.addEventListener('click', () => fileInput.click());
@@ -1016,6 +1035,35 @@ function parseTimeOff(rows, cols) {
   const byCol = col(/approved.*by/i);
   const parsed = {}, unmatched = new Set();
   let sickDays = 0, alreadyExcused = 0;
+  // Every approved request is kept for the grid: sick = faint pink + 🤒, anything else = faint yellow
+  const typeColName = typeCol, msgCol = col(/^message$/i);
+  const to = { data: {}, names: {}, from: '', to: '', requests: 0, days: 0, sick: 0, unmatched: new Set() };
+  rows.forEach((row, n) => {
+    const sd0 = toISODate(row[sdCol]), ed0 = toISODate(row[edCol]);
+    if (sd0) to.from = minStr(to.from, sd0);
+    if (ed0) to.to = maxStr(to.to, ed0);
+    if (!/^approved$/i.test((row[statusCol]||'').toString().trim())) return;
+    const name = (row[nameCol]||'').toString().trim();
+    if (!name || !sd0 || !ed0) return;
+    const type = (row[typeColName]||'').toString().trim(), sick = /sick/i.test(type);
+    const startM = timeOffMins(row[stCol], 0), endM = timeOffMins(row[etCol], 1440);
+    const by = byCol ? (row[byCol]||'').toString().trim() : '';
+    const msg = msgCol ? (row[msgCol]||'').toString().replace(/\s+/g, ' ').trim().slice(0, 140) : '';
+    const nm = splitName(name), pk = findPersonKey(name) || schedKeyFor(nm.fn, nm.ln);
+    to.requests++;
+    for (let d = sd0; d <= ed0; d = addDaysISO(d, 1)) {
+      const winStart = d === sd0 ? startM : 0, winEnd = d === ed0 ? endM : 1440;
+      if (winEnd <= winStart) continue; // e.g. request ending 12:00 am on this day
+      const rec = { k: sick ? 'sick' : 'off', t: type || (sick ? 'Sick' : 'Time off'), w: (winStart <= 0 && winEnd >= 1440) ? '' : timeOffWindow(winStart, winEnd) };
+      if (by) rec.by = by;
+      if (msg) rec.m = msg;
+      ((to.data[pk] = to.data[pk] || {})[d] = to.data[pk][d] || {})['r' + n] = rec;
+      to.names[pk] = name;
+      to.days++; if (sick) to.sick++;
+      if (!attendanceData[pk]) to.unmatched.add(name);
+    }
+  });
+  pendingTimeOff = to.days ? to : null;
   rows.forEach(row => {
     if (!/sick/i.test(row[typeCol]||'') || !/^approved$/i.test((row[statusCol]||'').toString().trim())) return;
     const name = (row[nameCol]||'').toString().trim();
@@ -1033,21 +1081,14 @@ function parseTimeOff(rows, cols) {
       const p = attendanceData[key];
       const val = p.dates && p.dates[d];
       if (val === 'Excused') { alreadyExcused++; continue; }
-      if (getPoints(val) <= 0) continue;
+      // Approved sick time excuses any occurrence that day (0.5, 1 or NC/NS), whatever hours the request covers
+      if (getPoints(val) <= 0 && !/^nc\s*\/?\s*ns$/i.test((val||'').toString().trim())) continue;
       const note = (p.notes && p.notes[d]) || '';
-      const sm = note.match(/Shift:\s*([0-9:]+\s*[AP]M)\s*-\s*([0-9:]+\s*[AP]M)/i);
-      const shiftStart = sm ? parseTimeToMins(sm[1]) : null;
-      let shiftEnd = sm ? parseTimeToMins(sm[2]) : null;
-      if (shiftEnd !== null && shiftStart !== null && shiftEnd <= shiftStart) shiftEnd += 1440;
-      let covered;
-      if (shiftStart === null) covered = true;
-      else if (val.toString().trim() === '0.5') covered = winStart <= shiftStart && winEnd > shiftStart; // late: sick time must cover the shift start
-      else covered = winStart < shiftEnd && winEnd > shiftStart; // no-show: any overlap with the shift
-      if (!covered) continue;
+      if (parsed[key] && parsed[key].dates[d]) continue; // two sick requests on the same day
       if (!parsed[key]) parsed[key] = { displayName: p.displayName || key, dates: {}, notes: {}, was: {} };
       parsed[key].dates[d] = 'Excused';
       parsed[key].was[d] = val;
-      parsed[key].notes[d] = (note ? note + ' | ' : '') + 'Excused: approved sick time off' + (by ? ' (' + by + ')' : '');
+      parsed[key].notes[d] = (note ? note + ' | ' : '') + 'Excused (was ' + val + '): approved sick time off' + (by ? ' (' + by + ')' : '');
     }
   });
   showTimeOffPreview(parsed, { sickDays, alreadyExcused, unmatched: [...unmatched] });
@@ -1059,15 +1100,18 @@ function showTimeOffPreview(parsed, stats) {
   changes.sort((a, b) => a.d.localeCompare(b.d));
   const fmt = ds => { const d = new Date(ds + 'T00:00:00'); return (d.getMonth()+1) + '/' + d.getDate(); };
   const p = document.getElementById('importPreview');
-  p.innerHTML = `<p style="margin-bottom:8px"><strong>Time-off report:</strong> ${stats.sickDays} approved sick days &middot; ${stats.alreadyExcused} already excused &middot; <strong>${changes.length}</strong> point${changes.length===1?'':'s'} to excuse</p>
-    ${stats.unmatched.length ? `<p style="margin-bottom:8px;color:var(--text-muted)">Not on tracker: ${stats.unmatched.join(', ')}</p>` : ''}
+  const to = pendingTimeOff;
+  const toLine = to ? `<p style="margin-bottom:8px"><strong>Shading:</strong> ${to.requests} approved requests &middot; <span style="color:#fcd34d">${to.days - to.sick} time-off days</span> (faint yellow) &middot; <span style="color:#f9a8d4">${to.sick} sick days &#129298;</span> (faint pink), ${fmt(to.from)} &ndash; ${fmt(to.to)}</p>` : '';
+  const notOn = [...new Set([...stats.unmatched, ...(to ? [...to.unmatched] : [])])].sort();
+  p.innerHTML = `${toLine}<p style="margin-bottom:8px"><strong>Sick time:</strong> ${stats.sickDays} approved sick days &middot; ${stats.alreadyExcused} already excused &middot; <strong>${changes.length}</strong> occurrence${changes.length===1?'':'s'} to excuse</p>
+    ${notOn.length ? `<p style="margin-bottom:8px;color:var(--text-muted)">Not on tracker: ${escHtml(notOn.join(', '))}</p>` : ''}
     ${changes.length ? `<table><thead><tr><th>Name</th><th>Date</th><th>Was</th><th>Now</th></tr></thead><tbody>
     ${changes.map(c => `<tr><td>${c.name}</td><td>${fmt(c.d)}</td><td>${c.was}</td><td style="color:var(--green)">Excused</td></tr>`).join('')}
-    </tbody></table>` : '<p style="color:var(--text-muted)">Nothing to change.</p>'}`;
+    </tbody></table>` : '<p style="color:var(--text-muted)">No occurrences to excuse.</p>'}`;
   p.style.display = 'block';
   const btn = document.getElementById('confirmImportBtn');
-  btn.textContent = 'Apply Excused';
-  btn.style.display = changes.length ? 'inline-flex' : 'none';
+  btn.textContent = changes.length ? 'Import + Excuse ' + changes.length : 'Import Data';
+  btn.style.display = (changes.length || to) ? 'inline-flex' : 'none';
 }
 // ─────────────────────────────────────────────────────────────────────────────
 function mapType(type, row) {
@@ -1162,6 +1206,17 @@ function confirmImport() {
     confirmScheduleImport();
     if (!pendingImport && !pendingEmployees) { closeImport(); return; }
   }
+  let toDays = 0;
+  if (pendingTimeOff) {
+    const to = pendingTimeOff;
+    toDays = confirmTimeOffImport();
+    if (!pendingImport || !Object.keys(pendingImport).length) {
+      pendingImport = null; closeImport();
+      logImport(Object.keys(to.data).length, fmtMD(to.from) + ' - ' + fmtMD(to.to), 'Time off: ' + toDays + ' days shaded');
+      toast('Shaded ' + toDays + ' approved time-off days', 'success');
+      return;
+    }
+  }
   if (pendingEmployees) { confirmEmployeeImport(); return; }
   if (!pendingImport) return;
   const caBefore = caPendingKeys();
@@ -1192,8 +1247,8 @@ function confirmImport() {
   saveData(); rebuildDates(); renderTable(); closeImport();
   if (isTimeOff) {
     const n = Object.values(snapshot).reduce((t, v) => t + Object.keys(v.dates).length, 0);
-    logImport(count, dateRange, 'Sick time off: ' + n + ' excused');
-    toast('Excused ' + n + ' points for approved sick time', 'success');
+    logImport(count, dateRange, 'Sick time off: ' + n + ' excused' + (toDays ? ', ' + toDays + ' days shaded' : ''));
+    toast('Excused ' + n + ' occurrence' + (n === 1 ? '' : 's') + ' for approved sick time' + (toDays ? ' and shaded ' + toDays + ' time-off days' : ''), 'success');
   } else {
     logImport(count, dateRange);
     toast('Imported ' + count + ' budtenders', 'success');
@@ -1209,6 +1264,13 @@ function rebuildDates() {
   if (showSched) {
     const today = todayYMD();
     Object.entries(schedData.shifts || {}).forEach(([pk, days]) => {
+      if (!attendanceData[pk]) return;
+      Object.keys(days || {}).forEach(d => { if (isYMD(d) && d <= today) s.add(d); });
+    });
+  }
+  {
+    const today = todayYMD();
+    Object.entries(timeOffData.days || {}).forEach(([pk, days]) => {
       if (!attendanceData[pk]) return;
       Object.keys(days || {}).forEach(d => { if (isYMD(d) && d <= today) s.add(d); });
     });
@@ -1428,7 +1490,7 @@ function renderTable() {
     if (periodInfo) {
       cells=filteredPeriods.map(p=>{ const pts=getPeriodPoints(dates,p,periodInfo.keyFn); const display=pts===0?'<span style="color:var(--text-muted)">&#183;</span>':(pts%1===0?pts:pts.toFixed(1)); return `<td class="period-cell ${pts>0?ptsColor(pts):''}">${display}</td>`; }).join('');
     } else {
-      cells=filteredDates.map(d=>{ const v=dates[d]||''; const hasUserNote=!!(userNotes[d]&&userNotes[d].trim()); const starHtml=hasUserNote?'<span class="note-star">&#9733;</span>':''; const lastEd=getCellEdits(person,d)[0]; const sc=showSched?schedCellParts(key,d,v):null; const tip=[hasUserNote?userNotes[d]:'', sc?sc.title:'', lastEd?('Edited by '+lastEd.who+' \u00b7 '+fmtEditTs(lastEd.ts)):''].filter(Boolean).join('\n'); const titleAttr=tip?` title="${tip.replace(/&/g,'&amp;').replace(/"/g,'&quot;')}"`:'' ; const vs=String(v).trim(); const schCls=!sc?'':' sched-on'+(getPoints(v)>=1||/^nc\s*\/?\s*ns$/i.test(vs)?' sched-one':getPoints(v)>0?' sched-half':/^excused$/i.test(vs)?' sched-exc':parseStoMins(v)!==null?' sched-sick':''); return `<td class="date-cell${schCls}" onclick="openEdit('${key.replace(/'/g,"\\'")}','${d}')"${titleAttr}>${cellHtml(v)}${sc?sc.html:''}${starHtml}</td>`; }).join('');
+      cells=filteredDates.map(d=>{ const v=dates[d]||''; const hasUserNote=!!(userNotes[d]&&userNotes[d].trim()); const starHtml=hasUserNote?'<span class="note-star">&#9733;</span>':''; const lastEd=getCellEdits(person,d)[0]; const sc=showSched?schedCellParts(key,d,v):null; const tod=timeOffDay(key,d); const tip=[hasUserNote?userNotes[d]:'', tod?tod.title:'', sc?sc.title:'', lastEd?('Edited by '+lastEd.who+' \u00b7 '+fmtEditTs(lastEd.ts)):''].filter(Boolean).join('\n'); const titleAttr=tip?` title="${tip.replace(/&/g,'&amp;').replace(/"/g,'&quot;')}"`:'' ; const vs=String(v).trim(); const schCls=tod?' to-'+tod.k:!sc?'':' sched-on'+(getPoints(v)>=1||/^nc\s*\/?\s*ns$/i.test(vs)?' sched-one':getPoints(v)>0?' sched-half':/^excused$/i.test(vs)?' sched-exc':parseStoMins(v)!==null?' sched-sick':''); return `<td class="date-cell${schCls}" onclick="openEdit('${key.replace(/'/g,"\\'")}','${d}')"${titleAttr}>${tod&&tod.k==='sick'?'<span class="to-emoji">&#129298;</span>':''}${cellHtml(v)}${sc?sc.html:''}${starHtml}</td>`; }).join('');
     }
     return `<tr><td class="${stoColorClass(stoRem)}" title="${getStoUsedMins(dates)>0?fmtMins(getStoUsedMins(dates))+' used of '+STO_ANNUAL_HOURS+':00':'No PS&STO used'}">${fmtStoHrs(stoRem)}</td><td><span class="name-badge clickable ${nc}" data-key="${escHtml(key)}" onclick="openProfile(this.dataset.key)" title="View profile">${fn}</span></td><td><span class="name-badge clickable ${nc}" data-key="${escHtml(key)}" onclick="openProfile(this.dataset.key)" title="View profile">${ln}</span>${wuTag}${caFolder}</td><td class="${ptsColor(mainPts)}">${mainPts>0?mainPts%1===0?mainPts:mainPts.toFixed(1):'0'}</td><td class="${ptsColor(wp)}">${wp>0?wp%1===0?wp:wp.toFixed(1):'0'}</td>${cells}</tr>`;
   }).join('');
@@ -1574,6 +1636,7 @@ function openEdit(pk,dt) {
   document.getElementById('userNoteInput').value=(p&&p.userNotes&&p.userNotes[dt])?p.userNotes[dt]:'';
   document.getElementById('hidePersonBtn').textContent=(p&&p.hidden)?'Unhide Budtender':'Hide Budtender';
   renderEditMeta(p, dt);
+  renderEditTimeOff(pk, dt);
   renderEditSched(pk, dt);
   document.getElementById('editModal').classList.add('active');
   setTimeout(()=>input.focus(),100);
@@ -2576,16 +2639,20 @@ const CAL_KINDS = {
   noin:    { label: 'Scheduled, no clock-in' },
   excused: { label: 'Excused' },
   sick:    { label: 'NYC-PS&STO' },
-  sched:   { label: 'Scheduled' }
+  sched:   { label: 'Scheduled' },
+  tosick:  { label: 'Sick (approved)' },
+  tooff:   { label: 'Time off (approved)' }
 };
 function calDay(pk, ds, today) {
   const p = attendanceData[pk] || {};
   const v = String(((p.dates || {})[ds]) || '').trim();
   const sd = schedDay(pk, ds, v);
+  const tod = timeOffDay(pk, ds);
   const pts = getPoints(v);
   let kind = '';
   if (pts >= 1 || /^nc\s*\/?\s*ns$/i.test(v)) kind = 'absent';
   else if (pts > 0) kind = 'late';
+  else if (tod) kind = tod.k === 'sick' ? 'tosick' : 'tooff';
   else if (/^excused$/i.test(v)) kind = 'excused';
   else if (parseStoMins(v) !== null) kind = 'sick';
   else if (sd) {
@@ -2596,6 +2663,7 @@ function calDay(pk, ds, today) {
   const wu = /^(1st|2nd|final|terminated|term)$/i.test(v);
   const lines = [fmtDateLong(ds) + (kind ? ': ' + (kind === 'sick' ? 'NYC-PS&STO: ' + schedMinsLabel(parseStoMins(v)) : CAL_KINDS[kind].label) : '')];
   if (wu) lines.push('Write-up: ' + v);
+  if (tod) lines.push(tod.title);
   if (sd) sd.list.forEach(r => lines.push('Scheduled ' + schedRangeText(r) + (r.i ? ' · ' + schedOutcome(r) : '')));
   const note = (p.notes || {})[ds]; if (note) lines.push(note);
   const un = (p.userNotes || {})[ds]; if (un) lines.push('Note: ' + un);
@@ -2616,7 +2684,7 @@ function renderPfCal() {
   const [ey, em] = pfCalEnd.split('-').map(Number);
   const months = [-2, -1, 0].map(off => { const t = new Date(Date.UTC(ey, em - 1 + off, 1)); return { y: t.getUTCFullYear(), m: t.getUTCMonth() + 1 }; });
   const MN = ['January','February','March','April','May','June','July','August','September','October','November','December'];
-  const counts = { worked: 0, late: 0, absent: 0, noin: 0, excused: 0, sick: 0, unchecked: 0 };
+  const counts = { worked: 0, late: 0, absent: 0, noin: 0, tosick: 0, tooff: 0, excused: 0, sick: 0, unchecked: 0 };
   const monthHtml = months.map(({ y, m }) => {
     const first = new Date(Date.UTC(y, m - 1, 1)).getUTCDay(), days = new Date(Date.UTC(y, m, 0)).getUTCDate();
     let cells = ['S','M','T','W','T','F','S'].map(d => `<div class="pf-cal-dow">${d}</div>`).join('');
@@ -2635,14 +2703,14 @@ function renderPfCal() {
   const chip = (k, n) => `<span class="pf-cal-count"><i class="cal-${k}"></i>${n} ${k === 'sick' ? 'NYC-PS&amp;STO' : escHtml(CAL_KINDS[k].label)}</span>`;
   // "Worked" only means something once clock-in info is imported, so skip a 0 there when
   // the scheduled days just haven't been checked yet
-  const summary = ['worked', 'late', 'absent', 'noin', 'excused', 'sick'].filter(k => counts[k] || ['late', 'absent'].includes(k) || (k === 'worked' && !counts.unchecked)).map(k => chip(k, counts[k])).join('') +
+  const summary = ['worked', 'late', 'absent', 'noin', 'tosick', 'tooff', 'excused', 'sick'].filter(k => counts[k] || ['late', 'absent'].includes(k) || (k === 'worked' && !counts.unchecked)).map(k => chip(k, counts[k])).join('') +
     (counts.unchecked ? `<span class="pf-cal-count"><i class="cal-sched"></i>${counts.unchecked} Scheduled, no clock-in info yet</span>` : '');
   el.innerHTML =
     `<div class="pf-cal-head"><div class="pf-sub" style="margin:0">Attendance, ${MN[months[0].m - 1].slice(0, 3)} – ${MN[months[2].m - 1].slice(0, 3)} ${months[2].y}</div>` +
     `<div class="pf-cal-nav"><button class="btn" onclick="pfCalStep(-1)" aria-label="Earlier months">&#8249;</button><button class="btn" onclick="pfCalStep(1)" aria-label="Later months"${atEnd ? ' disabled style="opacity:0.35;cursor:default"' : ''}>&#8250;</button></div></div>` +
     `<div class="pf-cal-months">${monthHtml}</div>` +
     `<div class="pf-cal-summary">${summary}</div>` +
-    `<div class="pf-cal-legend"><span><i class="cal-sched"></i>Scheduled (upcoming, or no clock-in info yet)</span><span><i class="cal-wu-key"></i>Write-up</span><span class="pf-cal-hint">Green days come from the When I Work schedule import. Hover a day for details.</span></div>`;
+    `<div class="pf-cal-legend"><span><i class="cal-sched"></i>Scheduled (upcoming, or no clock-in info yet)</span><span><i class="cal-wu-key"></i>Write-up</span><span class="pf-cal-hint">Green days come from the When I Work schedule import; yellow and pink days from the time-off report. Hover a day for details.</span></div>`;
   el.style.display = 'block';
 }
 
@@ -2700,6 +2768,60 @@ function confirmScheduleImport() {
   if (ps.shifts) bits.push(ps.shifts.count + ' shifts');
   if (ps.punches) bits.push(ps.punches.count + ' clock-ins');
   toast('Saved ' + bits.join(' and '), 'success');
+}
+// ───────────────────────────────────────────────────────────────
+
+// ── Approved time off (When I Work Time-Off Requests report) ────────────────
+// Display only, in its own Firebase node so it can't touch attendance data:
+//   timeoff_usq_gm/days/{person}/{YYYY-MM-DD}/{request} = { k: 'sick'|'off', t: type, w: hours that day ('' = all day), by, m }
+//   timeoff_usq_gm/names/{person} = name as it appears in the report
+// Importing the report replaces what's stored for the dates the report covers, so a
+// request canceled in When I Work disappears on the next import.
+function loadTimeOff() {
+  timeOffRef.off();
+  timeOffRef.on('value', snap => {
+    timeOffData = snap.val() || {};
+    rebuildDates(); renderTable();
+    if (editingPerson && editingDate) renderEditTimeOff(editingPerson, editingDate);
+    if (pfPerson) renderPfCal();
+  }, err => console.warn('Time off load failed:', err.message));
+}
+function timeOffWindow(a, b) {
+  const t = m => { m = Math.max(0, Math.min(1439, m)); const h = Math.floor(m / 60), mm = m % 60; return (h % 12 || 12) + ':' + pad2(mm) + ' ' + (h >= 12 ? 'PM' : 'AM'); };
+  return t(a) + ' – ' + t(b >= 1440 ? 1439 : b);
+}
+// One person's approved time off on a day: sick wins if there's both
+function timeOffDay(pk, ds) {
+  const day = ((timeOffData.days || {})[pk] || {})[ds];
+  if (!day) return null;
+  const list = Object.values(day).filter(Boolean);
+  if (!list.length) return null;
+  const k = list.some(r => r.k === 'sick') ? 'sick' : 'off';
+  const line = r => (r.k === 'sick' ? '🤒 Approved sick time' : 'Approved time off (' + r.t + ')') + ': ' + (r.w || 'all day') + (r.by ? ' · approved by ' + r.by : '');
+  return { k, list, title: list.map(line).join('\n') };
+}
+function renderEditTimeOff(pk, ds) {
+  const box = document.getElementById('editTimeOff'); if (!box) return;
+  const tod = timeOffDay(pk, ds);
+  if (!tod) { box.style.display = 'none'; box.innerHTML = ''; return; }
+  box.innerHTML = '<div class="note-label" style="margin-bottom:6px">' + (tod.k === 'sick' ? '&#129298; Approved sick time' : '&#127796; Approved time off') + ' (When I Work)</div>' + tod.list.map(r =>
+    `<div class="sb-row"><span class="sb-dot" style="background:${r.k === 'sick' ? '#f472b6' : '#facc15'}"></span><div>` +
+    `<div class="sb-main">${escHtml(r.t)} &middot; ${escHtml(r.w || 'All day')}</div>` +
+    `<div class="sb-sub">${r.by ? 'Approved by ' + escHtml(r.by) : 'Approved'}${r.m ? ' &middot; &ldquo;' + escHtml(r.m) + '&rdquo;' : ''}</div></div></div>`).join('');
+  box.style.display = 'block';
+}
+function confirmTimeOffImport() {
+  const to = pendingTimeOff; pendingTimeOff = null;
+  if (!to) return 0;
+  const up = {};
+  const stored = timeOffData.days || {};
+  Object.keys(stored).forEach(pk => Object.keys(stored[pk] || {}).forEach(ds => {
+    if (ds >= to.from && ds <= to.to && !((to.data[pk] || {})[ds])) up['days/' + pk + '/' + ds] = null;
+  }));
+  Object.entries(to.data).forEach(([pk, days]) => Object.entries(days).forEach(([ds, obj]) => { up['days/' + pk + '/' + ds] = obj; }));
+  Object.entries(to.names).forEach(([pk, n]) => { up['names/' + pk] = n; });
+  if (Object.keys(up).length) timeOffRef.update(up).catch(err => toast('Time off save failed: ' + err.message, 'error'));
+  return to.days;
 }
 // ───────────────────────────────────────────────────────────────
 
