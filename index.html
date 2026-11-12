@@ -976,7 +976,7 @@ function parseIncidentLog(rows, nameCol, dateCol, typeCol) {
     const name = (row[nameCol]||'').toString().trim();
     const rawDate = row[dateCol];
     const type = (row[typeCol]||'').toString().trim().toLowerCase();
-    if (!name || !rawDate) return;
+    if (!name || !rawDate || isManager(name)) return;
     let ds = '';
     if (typeof rawDate === 'number') { const d = XLSX.SSF.parse_date_code(rawDate); ds = `${d.y}-${String(d.m).padStart(2,'0')}-${String(d.d).padStart(2,'0')}`; }
     else { const d = new Date(rawDate); ds = !isNaN(d) ? d.toISOString().split('T')[0] : rawDate.toString(); }
@@ -1044,7 +1044,7 @@ function parseTimeOff(rows, cols) {
     if (ed0) to.to = maxStr(to.to, ed0);
     if (!/^approved$/i.test((row[statusCol]||'').toString().trim())) return;
     const name = (row[nameCol]||'').toString().trim();
-    if (!name || !sd0 || !ed0) return;
+    if (!name || !sd0 || !ed0 || isManager(name)) return;
     const type = (row[typeColName]||'').toString().trim(), sick = /sick/i.test(type);
     const startM = timeOffMins(row[stCol], 0), endM = timeOffMins(row[etCol], 1440);
     const by = byCol ? (row[byCol]||'').toString().trim() : '';
@@ -1459,7 +1459,7 @@ function getPeriodPoints(dates,periodKey,keyFn) {
 }
 function renderTable() {
   const q=(document.getElementById('searchBox').value||'').toLowerCase();
-  const people=Object.entries(attendanceData).filter(([k,v])=>(v.displayName||k).toLowerCase().includes(q)).sort((a,b)=>(a[1].displayName||a[0]).localeCompare(b[1].displayName||b[0]));
+  const people=Object.entries(attendanceData).filter(([k,v])=>!isManager(v.displayName||k)&&(v.displayName||k).toLowerCase().includes(q)).sort((a,b)=>(a[1].displayName||a[0]).localeCompare(b[1].displayName||b[0]));
   if (!people.length&&!Object.keys(attendanceData).length) {
     document.getElementById('emptyState').style.display='block';
     document.getElementById('mainTable').style.display='none'; return;
@@ -1700,8 +1700,9 @@ function confirmClear() {
   if (!confirm('Are you sure?')) return;
   attendanceData={}; saveData(); rebuildDates(); renderTable(); toast('All data cleared','success');
 }
-// Managers don't clock in/out, so they're kept out of corrective actions and alert emails.
-const MANAGERS = [['mark','muniz'], ['jeff','mchale']];
+// Managers don't clock in/out, so they're kept out of corrective actions and alert emails,
+// skipped by every import (notices, time off, schedule, timesheets) and never shown in the grid.
+const MANAGERS = [['mark','muniz'], ['jeff','mchale'], ['jeff','uemura'], ['kaleo','grant'], ['jennifer','bartholomeo']];
 function isManager(name) {
   const s = (name || '').toString().toLowerCase();
   let fn, ln;
