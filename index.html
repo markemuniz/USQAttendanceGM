@@ -1363,10 +1363,22 @@ function getLatestWriteup(dates) {
   Object.entries(dates).sort((a,b)=>a[0].localeCompare(b[0])).forEach(([d,v]) => { const val=(v||'').toString().trim().toLowerCase(); if (writeupTypes.includes(val)) latest=val; });
   return latest;
 }
+// How close someone is to their next corrective action: green, then yellow at a third of
+// the way, orange at two thirds, red once the next step is due. A First Warning comes at
+// 3 points, but after a write-up the next step is 2 points away (1 after a Final).
+function wuStageColor(dates, prefix) {
+  const pts = getWriteupPts(dates), t = caThreshold(dates);
+  if (pts >= t) return prefix + 'red';
+  if (pts * 3 >= t * 2) return prefix + 'orange';
+  if (pts * 3 >= t) return prefix + (prefix === 'pts-' && pts === 0 ? 'zero' : 'yellow');
+  return prefix + (prefix === 'pts-' && pts === 0 ? 'zero' : 'green');
+}
 function getNameColor(dates, terminated, shownPts) {
   if (terminated) return 'name-terminated';
-  // Color follows the points column on screen (Annual, Last 6 Months or Last 90 Days)
-  const pts=(typeof shownPts==='number')?shownPts:(getLatestWriteup(dates)!==null?getWriteupPts(dates):getLast60Pts(dates));
+  // Written up: color follows the write-up points toward their next step
+  if (getLatestWriteup(dates) !== null) return wuStageColor(dates, 'name-');
+  // Never written up: color follows the points column on screen (Annual, Last 6 Months or Last 90 Days)
+  const pts=(typeof shownPts==='number')?shownPts:getLast60Pts(dates);
   if (pts>=3) return 'name-red';
   if (pts>=2) return 'name-orange';
   if (pts>=1) return 'name-yellow';
@@ -1492,7 +1504,7 @@ function renderTable() {
     } else {
       cells=filteredDates.map(d=>{ const v=dates[d]||''; const hasUserNote=!!(userNotes[d]&&userNotes[d].trim()); const starHtml=hasUserNote?'<span class="note-star">&#9733;</span>':''; const lastEd=getCellEdits(person,d)[0]; const sc=showSched?schedCellParts(key,d,v):null; const tod=timeOffDay(key,d); const tip=[hasUserNote?userNotes[d]:'', tod?tod.title:'', sc?sc.title:'', lastEd?('Edited by '+lastEd.who+' \u00b7 '+fmtEditTs(lastEd.ts)):''].filter(Boolean).join('\n'); const titleAttr=tip?` title="${tip.replace(/&/g,'&amp;').replace(/"/g,'&quot;')}"`:'' ; const vs=String(v).trim(); const schCls=tod?' to-'+tod.k:!sc?'':' sched-on'+(getPoints(v)>=1||/^nc\s*\/?\s*ns$/i.test(vs)?' sched-one':getPoints(v)>0?' sched-half':/^excused$/i.test(vs)?' sched-exc':parseStoMins(v)!==null?' sched-sick':''); return `<td class="date-cell${schCls}" onclick="openEdit('${key.replace(/'/g,"\\'")}','${d}')"${titleAttr}>${tod&&tod.k==='sick'?'<span class="to-emoji">&#129298;</span>':''}${cellHtml(v)}${sc?sc.html:''}${starHtml}</td>`; }).join('');
     }
-    return `<tr><td class="${stoColorClass(stoRem)}" title="${getStoUsedMins(dates)>0?fmtMins(getStoUsedMins(dates))+' used of '+STO_ANNUAL_HOURS+':00':'No PS&STO used'}">${fmtStoHrs(stoRem)}</td><td><span class="name-badge clickable ${nc}" data-key="${escHtml(key)}" onclick="openProfile(this.dataset.key)" title="View profile">${fn}</span></td><td><span class="name-badge clickable ${nc}" data-key="${escHtml(key)}" onclick="openProfile(this.dataset.key)" title="View profile">${ln}</span>${wuTag}${caFolder}</td><td class="${ptsColor(mainPts)}">${mainPts>0?mainPts%1===0?mainPts:mainPts.toFixed(1):'0'}</td><td class="${ptsColor(wp)}">${wp>0?wp%1===0?wp:wp.toFixed(1):'0'}</td>${cells}</tr>`;
+    return `<tr><td class="${stoColorClass(stoRem)}" title="${getStoUsedMins(dates)>0?fmtMins(getStoUsedMins(dates))+' used of '+STO_ANNUAL_HOURS+':00':'No PS&STO used'}">${fmtStoHrs(stoRem)}</td><td><span class="name-badge clickable ${nc}" data-key="${escHtml(key)}" onclick="openProfile(this.dataset.key)" title="View profile">${fn}</span></td><td><span class="name-badge clickable ${nc}" data-key="${escHtml(key)}" onclick="openProfile(this.dataset.key)" title="View profile">${ln}</span>${wuTag}${caFolder}</td><td class="${ptsColor(mainPts)}">${mainPts>0?mainPts%1===0?mainPts:mainPts.toFixed(1):'0'}</td><td class="${getLatestWriteup(dates)!==null&&!termed?wuStageColor(dates,'pts-'):ptsColor(wp)}" title="${getLatestWriteup(dates)!==null&&!termed?fmtPts(wp)+' of '+caThreshold(dates)+' toward the '+CA_STAGES[caNextStage(dates)].label:''}">${wp>0?wp%1===0?wp:wp.toFixed(1):'0'}</td>${cells}</tr>`;
   }).join('');
   updateCABanner();
   updateSchedKey();
@@ -1700,7 +1712,7 @@ function isManager(name) {
   return MANAGERS.some(([f, l]) => clean(fn) === f && clean(ln) === l);
 }
 function toLocalYMD(d) { return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
-// ── Corrective Action (auto-generated at 3 points) ───────────────────────────
+// ── Corrective Action (auto-generated at 3 points; after a write-up 2, 2, then 1) ──
 // Anyone whose current points (same number that turns the name red: points since
 // their last write-up, or last-60-days if never written up) reach 3 gets a
 // corrective-action form pre-filled from the occurrence history. "Record in
@@ -1716,7 +1728,11 @@ function caTitleFor(fn, ln) {
   if (e && /supervisor/i.test(e.positions || '')) return 'Supervisor';
   return CA_CONFIG.title;
 }
-const CA_THRESHOLD = 3;
+const CA_THRESHOLD = 3;   // points for a First Warning (never written up, or after a Completed cycle)
+// After a write-up the next step comes sooner: 2 more points for the Second Warning,
+// 2 more for the Final Warning, then 1 more means Termination.
+const CA_STAGE_PTS = { first: 3, second: 2, final: 2, termination: 1 };
+function caThreshold(dates) { return CA_STAGE_PTS[caNextStage(dates || {})] || CA_THRESHOLD; }
 const CA_STAGES = {
   first:       { label: 'First Warning',  marker: '1st' },
   second:      { label: 'Second Warning', marker: '2nd' },
@@ -1891,7 +1907,7 @@ function caNeeds(person) {
   if (!person || person.hidden || isManager(person.displayName)) return false;
   const dates = person.dates || {};
   if (isTerminated(dates)) return false;
-  return caCurrentPts(dates) >= CA_THRESHOLD;
+  return caCurrentPts(dates) >= caThreshold(dates);
 }
 function caPendingKeys() { return Object.keys(attendanceData).filter(k => !isManager(k) && caNeeds(attendanceData[k])); }
 // The occurrences that make up the person's current points, oldest first.
@@ -1996,7 +2012,7 @@ function cleanupIdImport() {
   toast('Removed ' + names.length + ' duplicate rows', 'success');
 }
 
-// ── Email alert at 3 points (EmailJS) ──
+// ── Email alert when the next corrective action is due (EmailJS) ──
 // One email per person per discipline cycle. The "sent" marker lives in Firebase
 // (caAlertsSent/<key> = stage|last write-up date) and is claimed with a transaction,
 // so only one open copy of the tracker sends it. The marker is cleared once the
@@ -2067,7 +2083,7 @@ function caSyncAlerts() {
         cc_email: ALLOWED_EMAIL,
         ca_email: ca.email,
         ca_form_html: ca.form
-      }).then(() => toast('Alert emailed: ' + nm.fn + ' ' + nm.ln + ' reached ' + CA_THRESHOLD + ' points', 'success'))
+      }).then(() => toast('Alert emailed: ' + nm.fn + ' ' + nm.ln + ' reached ' + caThreshold(p.dates || {}) + ' points', 'success'))
         .catch(err => {
           console.warn('EmailJS send failed:', err);
           caSendFailed.add(k + '|' + sig);
@@ -2923,7 +2939,7 @@ function openProfile(key) {
   let status, warn = false;
   if (termed) { status = '<span class="writeup-tag wu-term" style="margin:0">Term</span> Terminated' + (wu && wu.label === 'Terminated' ? ' on ' + fmtUSShort(wu.date) : ''); warn = true; }
   else if (wu && ['1st','2nd','final'].includes(wu.val)) {
-    status = getWriteupTagHtml(dates).replace('margin-left:6px', '') + ' On a corrective action: <strong>' + wu.label + '</strong> issued ' + fmtUSShort(wu.date) + '. ' + fp(getWriteupPts(dates)) + ' pts since.';
+    status = getWriteupTagHtml(dates).replace('margin-left:6px', '') + ' On a corrective action: <strong>' + wu.label + '</strong> issued ' + fmtUSShort(wu.date) + '. ' + fp(getWriteupPts(dates)) + ' of ' + caThreshold(dates) + ' pts toward the ' + CA_STAGES[caNextStage(dates)].label + '.';
     warn = true;
   } else {
     status = 'Not on a corrective action' + (wu && wu.val === 'completed' ? ' (last cycle completed ' + fmtUSShort(wu.date) + ')' : '') + '.';
@@ -2935,7 +2951,7 @@ function openProfile(key) {
     [fp(annual), 'Annual pts', ptsColor(annual)],
     [fp(m6), 'Last 6 months', ptsColor(m6)],
     [fp(d90), 'Last 90 days', ptsColor(d90)],
-    [fp(wpt), 'Since write-up', ptsColor(wpt)],
+    [fp(wpt), 'Since write-up', getLatestWriteup(dates) !== null && !termed ? wuStageColor(dates, 'pts-') : ptsColor(wpt)],
     [fmtStoHrs(sto), 'PS&amp;STO hrs left', stoColorClass(sto)]
   ].map(([v, l, c]) => `<div class="pf-stat"><div class="v ${c}">${v}</div><div class="l">${l}</div></div>`).join('');
   // Attendance calendar: the current month and the two before it
