@@ -980,7 +980,7 @@ function parseIncidentLog(rows, nameCol, dateCol, typeCol) {
     let ds = '';
     if (typeof rawDate === 'number') { const d = XLSX.SSF.parse_date_code(rawDate); ds = `${d.y}-${String(d.m).padStart(2,'0')}-${String(d.d).padStart(2,'0')}`; }
     else { const d = new Date(rawDate); ds = !isNaN(d) ? d.toISOString().split('T')[0] : rawDate.toString(); }
-    const sk = name.replace(/[^a-zA-Z0-9_, -]/g, '_');
+    const sk = aliasKey(name) || name.replace(/[^a-zA-Z0-9_, -]/g, '_');
     if (!parsed[sk]) parsed[sk] = { displayName: name, dates: {}, notes: {} };
     const val = mapType(type, row);
     if (val) {
@@ -1026,7 +1026,7 @@ function findPersonKey(name) {
   const sk = name.replace(/[^a-zA-Z0-9_, -]/g, '_');
   if (attendanceData[sk]) return sk;
   const low = name.toLowerCase();
-  return Object.keys(attendanceData).find(k => (attendanceData[k].displayName||k).toLowerCase() === low) || null;
+  return Object.keys(attendanceData).find(k => (attendanceData[k].displayName||k).toLowerCase() === low) || aliasKey(name);
 }
 function parseTimeOff(rows, cols) {
   const col = re => cols.find(c => re.test(c.trim()));
@@ -1182,7 +1182,7 @@ function parseGrid(rows, fnCol, lnCol, cols) {
     const fn=(row[fnCol]||'').toString().trim(), ln=(row[lnCol]||'').toString().trim();
     if (!fn&&!ln) return;
     const name = ln ? `${ln}, ${fn}` : fn;
-    const sk = name.replace(/[^a-zA-Z0-9_, -]/g, '_');
+    const sk = aliasKey(name) || name.replace(/[^a-zA-Z0-9_, -]/g, '_');
     if (!parsed[sk]) parsed[sk] = { displayName: name, dates: {} };
     dc.forEach(d => { const v=(row[d]||'').toString().trim(); if (v) parsed[sk].dates[d]=v; });
   });
@@ -1737,6 +1737,43 @@ function splitName(name) {
   return { fn, ln };
 }
 function empKey(fn, ln) { return (fn + '_' + ln).toLowerCase().replace(/[^a-z0-9_]/g, ''); }
+// Other names a budtender has gone by in When I Work ("Sylvasia Warren" is now "Vasia Warren").
+// A merged row keeps them in `aliases`, so every import (notices, schedule, timesheets,
+// time off) puts that name on the one row instead of making a duplicate.
+function aliasKey(name) {
+  const norm = n => { const s = splitName(String(n || '').trim()); return (s.fn + ' ' + s.ln).toLowerCase().replace(/\s+/g, ' ').trim(); };
+  const want = norm(name);
+  if (!want) return null;
+  return Object.keys(attendanceData).find(k => Object.values((attendanceData[k] || {}).aliases || {}).some(a => norm(a) === want)) || null;
+}
+// Fold a duplicate row into the one to keep: dates, notes, star notes and edit history move
+// over (the kept row wins if both have the same day), the old name becomes an alias, and
+// schedule / time-off data saved under the old name moves too. Undo restores the rows.
+function mergePeople(src, dst) {
+  const a = attendanceData[src], b = attendanceData[dst];
+  if (!a || !b || src === dst) return null;
+  ['dates', 'notes', 'userNotes', 'edits'].forEach(f => { if (a[f]) b[f] = Object.assign({}, a[f], b[f] || {}); });
+  const al = new Set(Object.values(b.aliases || {}));
+  [a.displayName || src, ...Object.values(a.aliases || {})].forEach(x => al.add(x));
+  al.delete(b.displayName || dst);
+  b.aliases = [...al];
+  delete attendanceData[src];
+  const moveIn = (ref, data, buckets) => {
+    const up = {};
+    buckets.forEach(bk => {
+      const o = (data[bk] || {})[src];
+      if (!o) return;
+      Object.entries(o).forEach(([ds, v]) => { if (!(((data[bk] || {})[dst] || {})[ds])) up[bk + '/' + dst + '/' + ds] = v; });
+      up[bk + '/' + src] = null;
+    });
+    if ((data.names || {})[src]) up['names/' + src] = null;
+    if (Object.keys(up).length) ref.update(up).catch(err => toast('Move failed: ' + err.message, 'error'));
+  };
+  moveIn(schedRef, schedData, ['shifts', 'punches']);
+  moveIn(timeOffRef, timeOffData, ['days']);
+  saveData(); rebuildDates(); renderTable();
+  return b;
+}
 
 // ── Employee ID list ──
 function loadEmployees() {
@@ -2414,6 +2451,7 @@ function schedKeyFor(first, last) {
     else if ((nm.ln || '').toLowerCase() === l && f && nf && (nf.startsWith(f) || f.startsWith(nf))) nick.push(k);
   });
   if (hit) return hit;
+  const ak = aliasKey(first + ' ' + last); if (ak) return ak;
   if (nick.length === 1) return nick[0];
   return (first + ' ' + last).trim().replace(/[^a-zA-Z0-9_, -]/g, '_');
 }
@@ -2612,16 +2650,49 @@ function fmtShort(dt) {
 // are in the hover text and the edit popup.
 function schedCellParts(pk, ds, v) {
   const sd = schedDay(pk, ds, v);
-  if (!sd) return null;
+  const ns = v ? noticeShift(pk, ds) : null;
+  const why = ns && ns.reason ? 'Attendance notice: ' + ns.reason + (ns.clocked ? ' · clocked ' + ns.clocked : '') : '';
+  if (!sd) {
+    // Not in the When I Work schedule export (a no-show's shift often gets removed or
+    // reassigned afterward), so use the shift the attendance notice recorded
+    if (!ns) return null;
+    return {
+      html: `<span class="sch-time">${fmtShort(ns.s)}-${fmtShort(ns.e)}</span>`,
+      title: ['Shift ' + schedRangeText(ns) + ' (from the attendance notice; not in the When I Work schedule)', why].filter(Boolean).join('\n')
+    };
+  }
   return {
     html: sd.list.map(r => `<span class="sch-time">${fmtShort(r.s)}-${fmtShort(r.e)}</span>`).join(''),
-    title: sd.list.map(r => 'Scheduled ' + schedRangeText(r) + ': ' + schedOutcome(r)).join('\n')
+    title: sd.list.map(r => 'Scheduled ' + schedRangeText(r) + ': ' + schedOutcome(r)).concat(why ? [why] : []).join('\n')
   };
+}
+// The shift an Attendance Notices row recorded for this day, from its note:
+// "no show on shift | Shift: 04:00 PM - 11:00 PM" or "late on clock-in (28 minutes) | Shift: ... | Clocked: ..."
+function noticeShift(pk, ds) {
+  const p = attendanceData[pk];
+  const note = String((p && p.notes && p.notes[ds]) || '');
+  const m = /Shift:\s*(\d{1,2}:\d{2}\s*[AP]M)\s*-\s*(\d{1,2}:\d{2}\s*[AP]M)/i.exec(note);
+  if (!m) return null;
+  const a = parseTimeToMins(m[1]), b = parseTimeToMins(m[2]);
+  if (a === null || b === null) return null;
+  const hm = x => pad2(Math.floor(x / 60) % 24) + ':' + pad2(x % 60);
+  const s = ds + 'T' + hm(a), e = fixEnd(s, ds + 'T' + hm(b));
+  const cl = /Clocked:\s*([^|]*)/i.exec(note);
+  return { s, e, reason: note.split('|')[0].trim(), clocked: cl ? cl[1].trim() : '' };
 }
 function renderEditSched(pk, ds) {
   const box = document.getElementById('editSched'); if (!box) return;
   const sd = schedDay(pk, ds);
-  if (!sd) { box.style.display = 'none'; box.innerHTML = ''; return; }
+  if (!sd) {
+    const ns = ((attendanceData[pk] || {}).dates || {})[ds] ? noticeShift(pk, ds) : null;
+    if (!ns) { box.style.display = 'none'; box.innerHTML = ''; return; }
+    box.innerHTML = '<div class="note-label" style="margin-bottom:6px">&#128197; Shift (from the attendance notice)</div>' +
+      `<div class="sb-row"><span class="sb-dot sch-bad"></span><div>` +
+      `<div class="sb-main">Scheduled ${escHtml(schedRangeText(ns))}</div>` +
+      `<div class="sb-sub">${escHtml(ns.reason ? ns.reason.charAt(0).toUpperCase() + ns.reason.slice(1) : '')}${ns.clocked ? ' &middot; clocked ' + escHtml(ns.clocked) : ''}. This shift isn&rsquo;t in the When I Work schedule export anymore.</div></div></div>`;
+    box.style.display = 'block';
+    return;
+  }
   box.innerHTML = '<div class="note-label" style="margin-bottom:6px">&#128197; Schedule (When I Work)</div>' + sd.list.map(r =>
     `<div class="sb-row"><span class="sb-dot sch-${SCHED_META[r.status].cls}"></span><div>` +
     `<div class="sb-main">Scheduled ${escHtml(schedRangeText(r))}${r.pos ? '<span class="sb-pos">' + escHtml(r.pos) + '</span>' : ''}</div>` +
