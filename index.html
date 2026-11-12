@@ -1903,7 +1903,8 @@ function caNextStage(dates) {
   if (wu === 'final') return 'termination';
   return 'first';   // never written up, or last cycle was marked Completed
 }
-function caCurrentPts(dates) { return getLatestWriteup(dates) !== null ? getWriteupPts(dates) : getLast60Pts(dates); }
+// Never written up: points from the last 6 months. Written up: points since the latest write-up.
+function caCurrentPts(dates) { return getLatestWriteup(dates) !== null ? getWriteupPts(dates) : getPtsSince(dates, 6, 'months'); }
 function caNeeds(person) {
   if (!person || person.hidden || isManager(person.displayName)) return false;
   const dates = person.dates || {};
@@ -1918,7 +1919,7 @@ function caGetOccurrences(person) {
   let lastWU = null;
   if (hasWU) Object.entries(dates).sort((a,b)=>a[0].localeCompare(b[0])).forEach(([d,v]) => { if (['1st','2nd','final','terminated','term','completed'].includes((v||'').toString().trim().toLowerCase())) lastWU = d; });
   const today = new Date(); today.setHours(0,0,0,0);
-  const cutoff = new Date(today); cutoff.setDate(cutoff.getDate() - 60);
+  const cutoff = new Date(today); cutoff.setMonth(cutoff.getMonth() - 6);
   const out = [];
   Object.entries(dates).sort((a,b)=>a[0].localeCompare(b[0])).forEach(([d,v]) => {
     const pts = getPoints(v); if (!pts) return;
