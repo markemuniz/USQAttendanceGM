@@ -1377,8 +1377,8 @@ function getNameColor(dates, terminated, shownPts) {
   if (terminated) return 'name-terminated';
   // Written up: color follows the write-up points toward their next step
   if (getLatestWriteup(dates) !== null) return wuStageColor(dates, 'name-');
-  // Never written up: color follows the points column on screen (Annual, Last 6 Months or Last 90 Days)
-  const pts=(typeof shownPts==='number')?shownPts:getLast60Pts(dates);
+  // Never written up: color always follows the last 6 months, whatever points column is on screen
+  const pts=getPtsSince(dates, 6, 'months');
   if (pts>=3) return 'name-red';
   if (pts>=2) return 'name-orange';
   if (pts>=1) return 'name-yellow';
